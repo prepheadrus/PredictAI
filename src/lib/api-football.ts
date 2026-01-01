@@ -1,7 +1,6 @@
 
 import { db } from '@/db';
 import * as schema from '@/db/schema';
-import { eq } from 'drizzle-orm';
 
 const API_URL = 'https://api.football-data.org/v4';
 
@@ -21,8 +20,8 @@ const apiFetch = async (endpoint: string) => {
   if (!response.ok) {
     console.error(`API call failed for endpoint: ${endpoint}. Response: ${JSON.stringify(data)}`);
     const errorMessage = data.message || `API call failed for endpoint: ${endpoint}`;
-    // The API sometimes puts the error in an 'error' property
-    const detailedError = data.error ? JSON.stringify(data.error) : '';
+    // The API sometimes puts the error in an 'error' property or 'errors' object
+    const detailedError = data.error ? JSON.stringify(data.error) : (data.errors ? JSON.stringify(data.errors) : '');
     throw new Error(`${errorMessage} ${detailedError}`);
   }
 
@@ -30,7 +29,6 @@ const apiFetch = async (endpoint: string) => {
 };
 
 export async function fetchFixtures(leagueCode: string, season: string) {
-    // Premier League has code PL
   return apiFetch(`competitions/${leagueCode}/matches?season=${season}`);
 }
 
@@ -69,8 +67,8 @@ async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueId: number):
 
 export async function mapAndUpsertFixtures(fixturesResponse: any) {
     const { matches, competition } = fixturesResponse;
-    if (!competition) {
-        throw new Error("Competition data is missing from the API response.");
+    if (!competition || !competition.area) {
+        throw new Error("Competition data or area is missing from the API response.");
     }
     
     // Upsert League
@@ -78,7 +76,7 @@ export async function mapAndUpsertFixtures(fixturesResponse: any) {
         .values({
             id: competition.id,
             name: competition.name,
-            country: competition.area.name,
+            country: competition.area.name, // Correctly access nested property
         })
         .onConflictDoUpdate({
             target: schema.leagues.id,
@@ -101,8 +99,6 @@ export async function mapAndUpsertFixtures(fixturesResponse: any) {
                 status = 'FT';
                 break;
             case 'SCHEDULED':
-                status = 'NS';
-                break;
             case 'TIMED':
                 status = 'NS';
                 break;
