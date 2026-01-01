@@ -1,3 +1,4 @@
+
 import { db } from '@/db';
 import * as schema from '@/db/schema';
 import { eq } from 'drizzle-orm';
@@ -88,6 +89,12 @@ export async function mapAndUpsertFixtures(fixtures: any[]) {
     let count = 0;
     for (const fixtureData of fixtures) {
         const { fixture, teams: apiTeams, goals, league } = fixtureData;
+
+        // Skip if team data is incomplete
+        if (!apiTeams.home?.id || !apiTeams.away?.id) {
+            console.warn(`Skipping fixture ${fixture.id} due to missing team ID.`);
+            continue;
+        }
 
         // Ensure teams and league exist before creating match
         const { homeTeamId, awayTeamId } = await getTeamIds(apiTeams.home, apiTeams.away, league);
