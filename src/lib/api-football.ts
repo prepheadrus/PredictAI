@@ -20,44 +20,35 @@ const apiFetch = async (endpoint: string) => {
   const data = await response.json();
   if (!response.ok) {
     console.error(`API call failed for endpoint: ${endpoint}. Response: ${JSON.stringify(data)}`);
-    throw new Error(data.message || `API call failed for endpoint: ${endpoint}`);
+    const errorMessage = data.message || `API call failed for endpoint: ${endpoint}`;
+    // The API sometimes puts the error in an 'error' property
+    const detailedError = data.error ? JSON.stringify(data.error) : '';
+    throw new Error(`${errorMessage} ${detailedError}`);
   }
 
   return data;
 };
 
-export async function fetchFixtures(leagueCode: string) {
+export async function fetchFixtures(leagueCode: string, season: string) {
     // Premier League has code PL
-  return apiFetch(`competitions/${leagueCode}/matches`);
+  return apiFetch(`competitions/${leagueCode}/matches?season=${season}`);
 }
 
 
 // Helper to find or create teams and return their DB IDs
-async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueAPI: any): Promise<{ homeTeamId: number, awayTeamId: number }> {
+async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueId: number): Promise<{ homeTeamId: number, awayTeamId: number }> {
     
-    // Upsert League
-    await db.insert(schema.leagues)
-        .values({
-            id: leagueAPI.id,
-            name: leagueAPI.name,
-            country: leagueAPI.area.name,
-        })
-        .onConflictDoUpdate({
-            target: schema.leagues.id,
-            set: { name: leagueAPI.name, country: leagueAPI.area.name }
-        });
-
     // Upsert Home Team
     await db.insert(schema.teams)
         .values({
             id: homeTeamAPI.id,
             name: homeTeamAPI.name,
-            league_id: leagueAPI.id,
+            league_id: leagueId,
             logoUrl: homeTeamAPI.crest,
         })
         .onConflictDoUpdate({
             target: schema.teams.id,
-            set: { name: homeTeamAPI.name, league_id: leagueAPI.id, logoUrl: homeTeamAPI.crest }
+            set: { name: homeTeamAPI.name, league_id: leagueId, logoUrl: homeTeamAPI.crest }
         });
 
     // Upsert Away Team
@@ -65,12 +56,12 @@ async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueAPI: any): P
         .values({
             id: awayTeamAPI.id,
             name: awayTeamAPI.name,
-            league_id: leagueAPI.id,
+            league_id: leagueId,
             logoUrl: awayTeamAPI.crest,
         })
         .onConflictDoUpdate({
             target: schema.teams.id,
-            set: { name: awayTeamAPI.name, league_id: leagueAPI.id, logoUrl: awayTeamAPI.crest }
+            set: { name: awayTeamAPI.name, league_id: leagueId, logoUrl: awayTeamAPI.crest }
         });
 
     return { homeTeamId: homeTeamAPI.id, awayTeamId: awayTeamAPI.id };
@@ -78,6 +69,22 @@ async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueAPI: any): P
 
 export async function mapAndUpsertFixtures(fixturesResponse: any) {
     const { matches, competition } = fixturesResponse;
+    if (!competition) {
+        throw new Error("Competition data is missing from the API response.");
+    }
+    
+    // Upsert League
+    await db.insert(schema.leagues)
+        .values({
+            id: competition.id,
+            name: competition.name,
+            country: competition.area.name,
+        })
+        .onConflictDoUpdate({
+            target: schema.leagues.id,
+            set: { name: competition.name, country: competition.area.name }
+        });
+
     let count = 0;
     for (const match of matches) {
         // Skip if team data is incomplete
@@ -86,7 +93,7 @@ export async function mapAndUpsertFixtures(fixturesResponse: any) {
             continue;
         }
 
-        const { homeTeamId, awayTeamId } = await getTeamIds(match.homeTeam, match.awayTeam, competition);
+        const { homeTeamId, awayTeamId } = await getTeamIds(match.homeTeam, match.awayTeam, competition.id);
         
         let status;
         switch (match.status) {
