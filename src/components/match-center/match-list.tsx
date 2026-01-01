@@ -30,10 +30,11 @@ export function MatchList({ initialMatches }: MatchListProps) {
     setIsLoading(true);
     toast({
       title: "Data Refresh Started",
-      description: "Fetching the latest matches for the 2024 season.",
+      description: "Fetching the latest matches for the Premier League.",
     });
     try {
-      const response = await fetch("/api/ingest?season=2024");
+      // football-data.org uses league codes, e.g., 'PL' for Premier League
+      const response = await fetch("/api/ingest?leagueCode=PL");
       const result = await response.json();
       if (!response.ok) {
         throw new Error(result.error || "Failed to fetch data.");

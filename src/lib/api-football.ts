@@ -3,43 +3,34 @@ import { db } from '@/db';
 import * as schema from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
-const API_URL = 'https://v3.football.api-sports.io';
+const API_URL = 'https://api.football-data.org/v4';
 
 const apiFetch = async (endpoint: string) => {
-  const apiKey = process.env.FOOTBALL_API_KEY;
+  const apiKey = process.env.FOOTBALL_DATA_API_KEY;
   if (!apiKey) {
-    throw new Error('FOOTBALL_API_KEY is not defined in .env');
+    throw new Error('FOOTBALL_DATA_API_KEY is not defined in .env');
   }
 
   const response = await fetch(`${API_URL}/${endpoint}`, {
     headers: {
-      'x-rapidapi-host': 'v3.football.api-sports.io',
-      'x-rapidapi-key': apiKey,
+      'X-Auth-Token': apiKey,
     },
   });
 
+  const data = await response.json();
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`API call failed for endpoint: ${endpoint}. Response: ${errorText}`);
-    throw new Error(`API call failed for endpoint: ${endpoint}`);
+    console.error(`API call failed for endpoint: ${endpoint}. Response: ${JSON.stringify(data)}`);
+    throw new Error(data.message || `API call failed for endpoint: ${endpoint}`);
   }
 
-  const data = await response.json();
-  if (data.errors && Object.keys(data.errors).length > 0 && JSON.stringify(data.errors) !== '[]') {
-    console.error('API Errors:', data.errors);
-    throw new Error(`API returned errors: ${JSON.stringify(data.errors)}`);
-  }
-  return data.response;
+  return data;
 };
 
-export async function fetchFixtures(leagueId: number, season: number) {
-  return apiFetch(`fixtures?league=${leagueId}&season=${season}`);
+export async function fetchFixtures(leagueCode: string) {
+    // Premier League has code PL
+  return apiFetch(`competitions/${leagueCode}/matches`);
 }
 
-export async function getOdds(fixtureId: number) {
-    // Note: API-Football has different plans. We'll use a common bookmaker (e.g., Bet365 - id 8)
-    return apiFetch(`odds?fixture=${fixtureId}&bookmaker=8`);
-}
 
 // Helper to find or create teams and return their DB IDs
 async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueAPI: any): Promise<{ homeTeamId: number, awayTeamId: number }> {
@@ -49,11 +40,11 @@ async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueAPI: any): P
         .values({
             id: leagueAPI.id,
             name: leagueAPI.name,
-            country: leagueAPI.country,
+            country: leagueAPI.area.name,
         })
         .onConflictDoUpdate({
             target: schema.leagues.id,
-            set: { name: leagueAPI.name, country: leagueAPI.country }
+            set: { name: leagueAPI.name, country: leagueAPI.area.name }
         });
 
     // Upsert Home Team
@@ -62,11 +53,11 @@ async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueAPI: any): P
             id: homeTeamAPI.id,
             name: homeTeamAPI.name,
             league_id: leagueAPI.id,
-            logoUrl: homeTeamAPI.logo,
+            logoUrl: homeTeamAPI.crest,
         })
         .onConflictDoUpdate({
             target: schema.teams.id,
-            set: { name: homeTeamAPI.name, league_id: leagueAPI.id, logoUrl: homeTeamAPI.logo }
+            set: { name: homeTeamAPI.name, league_id: leagueAPI.id, logoUrl: homeTeamAPI.crest }
         });
 
     // Upsert Away Team
@@ -75,38 +66,57 @@ async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueAPI: any): P
             id: awayTeamAPI.id,
             name: awayTeamAPI.name,
             league_id: leagueAPI.id,
-            logoUrl: awayTeamAPI.logo,
+            logoUrl: awayTeamAPI.crest,
         })
         .onConflictDoUpdate({
             target: schema.teams.id,
-            set: { name: awayTeamAPI.name, league_id: leagueAPI.id, logoUrl: awayTeamAPI.logo }
+            set: { name: awayTeamAPI.name, league_id: leagueAPI.id, logoUrl: awayTeamAPI.crest }
         });
 
     return { homeTeamId: homeTeamAPI.id, awayTeamId: awayTeamAPI.id };
 }
 
-export async function mapAndUpsertFixtures(fixtures: any[]) {
+export async function mapAndUpsertFixtures(fixturesResponse: any) {
+    const { matches, competition } = fixturesResponse;
     let count = 0;
-    for (const fixtureData of fixtures) {
-        const { fixture, teams: apiTeams, goals, league } = fixtureData;
-
+    for (const match of matches) {
         // Skip if team data is incomplete
-        if (!apiTeams.home?.id || !apiTeams.away?.id) {
-            console.warn(`Skipping fixture ${fixture.id} due to missing team ID.`);
+        if (!match.homeTeam?.id || !match.awayTeam?.id) {
+            console.warn(`Skipping match ${match.id} due to missing team ID.`);
             continue;
         }
 
-        // Ensure teams and league exist before creating match
-        const { homeTeamId, awayTeamId } = await getTeamIds(apiTeams.home, apiTeams.away, league);
+        const { homeTeamId, awayTeamId } = await getTeamIds(match.homeTeam, match.awayTeam, competition);
         
+        let status;
+        switch (match.status) {
+            case 'FINISHED':
+                status = 'FT';
+                break;
+            case 'SCHEDULED':
+                status = 'NS';
+                break;
+            case 'TIMED':
+                status = 'NS';
+                break;
+            case 'IN_PLAY':
+                status = 'LIVE';
+                break;
+             case 'PAUSED':
+                status = 'HT';
+                break;
+            default:
+                status = match.status; // Keep original status if not mappable
+        }
+
         const matchData = {
-            api_fixture_id: fixture.id,
+            api_fixture_id: match.id,
             home_team_id: homeTeamId,
             away_team_id: awayTeamId,
-            match_date: new Date(fixture.date),
-            home_score: goals.home,
-            away_score: goals.away,
-            status: fixture.status.short,
+            match_date: new Date(match.utcDate),
+            home_score: match.score.fullTime.home,
+            away_score: match.score.fullTime.away,
+            status: status,
         };
 
         await db.insert(schema.matches)

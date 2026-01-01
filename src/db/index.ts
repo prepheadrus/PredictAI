@@ -27,7 +27,7 @@ try {
                 "logo_url" text
             );
             CREATE TABLE "matches" (
-                "id" integer PRIMARY KEY NOT NULL,
+                "id" integer PRIMARY KEY AUTOINCREMENT NOT NULL,
                 "api_fixture_id" integer,
                 "home_team_id" integer,
                 "away_team_id" integer,
