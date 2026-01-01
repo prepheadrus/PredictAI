@@ -15,17 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { RefreshCw } from "lucide-react";
-
-// Infer the type from the server action return value
-type MatchWithTeams = {
-    id: number;
-    match_date: Date | null;
-    home_score: number | null;
-    away_score: number | null;
-    status: string | null;
-    homeTeam: { name: string } | null;
-    awayTeam: { name: string } | null;
-};
+import type { MatchWithTeams } from "@/lib/types";
 
 interface MatchListProps {
   initialMatches: MatchWithTeams[];
@@ -40,17 +30,17 @@ export function MatchList({ initialMatches }: MatchListProps) {
     setIsLoading(true);
     toast({
       title: "Data Refresh Started",
-      description: "Fetching the latest matches from the API.",
+      description: "Fetching the latest matches for the 2025 season.",
     });
     try {
-      const response = await fetch("/api/ingest");
+      const response = await fetch("/api/ingest?season=2025");
       if (!response.ok) {
         throw new Error("Failed to fetch data.");
       }
       const result = await response.json();
       toast({
         title: "Refresh Complete",
-        description: `${result.processed} matches were ingested. The list will update shortly.`,
+        description: `${result.processed || 0} matches were ingested. The list will update shortly.`,
       });
       // Re-fetch or just reload for simplicity in this context
       window.location.reload();

@@ -1,11 +1,9 @@
-import { matches } from "@/lib/mock-data";
 import { MatchPredictionCard } from "./match-prediction-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import { getUpcomingMatches } from "@/app/actions";
 
-export function UpcomingMatches() {
-  const upcoming = matches
-    .filter((m) => new Date(m.date) > new Date())
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+export async function UpcomingMatches() {
+  const upcoming = await getUpcomingMatches();
 
   return (
     <Card>
@@ -16,11 +14,18 @@ export function UpcomingMatches() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {upcoming.map((match) => (
-            <MatchPredictionCard key={match.id} match={match} />
-          ))}
-        </div>
+        {upcoming.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {upcoming.map((match) => (
+              <MatchPredictionCard key={match.id} match={match} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center text-muted-foreground py-8">
+            <p>No upcoming matches found.</p>
+            <p className="text-sm">Try refreshing the data in the Match Center.</p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
