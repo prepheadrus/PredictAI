@@ -16,7 +16,7 @@ export const teams = sqliteTable('teams', {
 
 export const matches = sqliteTable('matches', {
   id: integer('id').primaryKey(),
-  fixture_id: integer('fixture_id').unique(),
+  api_fixture_id: integer('api_fixture_id').unique(),
   home_team_id: integer('home_team_id').references(() => teams.id),
   away_team_id: integer('away_team_id').references(() => teams.id),
   match_date: integer('match_date', { mode: 'timestamp' }),

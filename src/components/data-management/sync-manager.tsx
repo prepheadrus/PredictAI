@@ -10,34 +10,37 @@ type SyncStatus = "idle" | "syncing" | "success" | "error";
 
 export function SyncManager() {
   const [status, setStatus] = useState<SyncStatus>("idle");
+  const [processedCount, setProcessedCount] = useState<number | null>(null);
   const { toast } = useToast();
 
   const handleSync = async () => {
     setStatus("syncing");
+    setProcessedCount(null);
     toast({
-      title: "Sync Started",
+      title: "Ingestion Started",
       description: "Fetching latest data from API-Football...",
     });
 
     try {
-      const response = await fetch('/api/sync');
+      const response = await fetch('/api/ingest');
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Sync failed');
+        throw new Error(result.error || 'Ingestion failed');
       }
       
+      setProcessedCount(result.processed);
       setStatus("success");
       toast({
-        title: "Sync Successful",
-        description: `${result.count} matches have been updated from API-Football.`,
+        title: "Ingestion Successful",
+        description: `${result.processed} matches have been processed from API-Football.`,
       });
 
     } catch (error: any) {
       setStatus("error");
       toast({
         variant: "destructive",
-        title: "Sync Failed",
+        title: "Ingestion Failed",
         description: error.message || "Could not fetch or validate data.",
       });
     }
@@ -48,22 +51,22 @@ export function SyncManager() {
       case "syncing":
         return {
           icon: <Loader2 className="h-4 w-4 animate-spin" />,
-          text: "Syncing...",
+          text: "Ingesting...",
         };
       case "success":
         return {
-          icon: <CheckCircle className="h-4 w-4 text-green-500" />,
-          text: "Sync Now",
+          icon: <RefreshCw className="h-4 w-4" />,
+          text: "Ingest Again",
         };
       case "error":
         return {
-          icon: <AlertTriangle className="h-4 w-4 text-red-500" />,
-          text: "Retry Sync",
+          icon: <RefreshCw className="h-4 w-4" />,
+          text: "Retry Ingestion",
         };
       default:
         return {
-          icon: <RefreshCw />,
-          text: "Sync Now",
+          icon: <RefreshCw className="h-4 w-4" />,
+          text: "Start Ingestion",
         };
     }
   };
@@ -81,12 +84,12 @@ export function SyncManager() {
         <span>{text}</span>
       </Button>
 
-      {status === 'success' && (
+      {status === 'success' && processedCount !== null && (
         <Alert>
           <CheckCircle className="h-4 w-4" />
-          <AlertTitle>Sync Complete</AlertTitle>
+          <AlertTitle>Ingestion Complete</AlertTitle>
           <AlertDescription>
-            Data successfully synchronized at {new Date().toLocaleTimeString()}.
+            Successfully processed {processedCount} matches at {new Date().toLocaleTimeString()}.
           </AlertDescription>
         </Alert>
       )}
@@ -94,9 +97,9 @@ export function SyncManager() {
       {status === 'error' && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Sync Error</AlertTitle>
+          <AlertTitle>Ingestion Error</AlertTitle>
           <AlertDescription>
-            Failed to sync data. Please check your API key and network connection.
+            Failed to ingest data. Please check your API key and network connection.
           </AlertDescription>
         </Alert>
       )}
