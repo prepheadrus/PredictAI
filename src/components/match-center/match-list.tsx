@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 import { RefreshCw } from "lucide-react";
 import type { MatchWithTeams } from "@/lib/types";
 
@@ -83,7 +83,11 @@ export function MatchList({ initialMatches }: MatchListProps) {
                 <TableRow key={match.id}>
                   <TableCell>
                     {match.match_date
-                      ? format(new Date(match.match_date), "dd/MM/yyyy HH:mm")
+                      ? formatInTimeZone(
+                          match.match_date,
+                          "Europe/London",
+                          "dd/MM/yyyy HH:mm"
+                        )
                       : "N/A"}
                   </TableCell>
                   <TableCell>{match.homeTeam?.name ?? 'N/A'}</TableCell>
