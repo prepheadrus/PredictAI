@@ -2,15 +2,16 @@
 "use client";
 
 import { useState } from "react";
-import { format } from "date-fns";
-import { RefreshCw, Calendar, Trophy, AlertCircle } from "lucide-react";
+import { format as formatDate, toDate } from "date-fns-tz";
+import { RefreshCw, Calendar, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import type { MatchWithTeams } from "@/lib/types";
 
 // Veri Tipi Tanımlaması (API V4 Yapısına Uygun)
-interface Match {
+interface DisplayMatch {
   fixture: {
     id: number;
     date: string;
@@ -21,8 +22,8 @@ interface Match {
     logo: string | null;
   };
   teams: {
-    home: { id: number; name: string; logo: string | null };
-    away: { id: number; name: string; logo: string | null };
+    home: { id: number | null; name: string; logo: string | null };
+    away: { id: number | null; name: string; logo: string | null };
   };
   goals: {
     home: number | null;
@@ -30,8 +31,43 @@ interface Match {
   };
 }
 
-export function MatchList({ initialMatches }: { initialMatches: any[] }) {
-  const [data, setData] = useState<Match[]>(initialMatches || []);
+const formatMatchData = (match: any): DisplayMatch => {
+  const date = match.match_date || match.utcDate;
+  const timeZone = 'Europe/London'; // Consistent timezone
+  const formattedDate = date ? formatDate(toDate(date, { timeZone }), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", { timeZone }) : new Date().toISOString();
+
+  return {
+    fixture: {
+      id: match.id,
+      date: formattedDate,
+      status: { short: match.status },
+    },
+    league: {
+      name: "Premier League", // This is mock data until we join leagues table
+      logo: null,
+    },
+    teams: {
+      home: {
+        id: match.homeTeam?.id,
+        name: match.homeTeam?.name || "Ev Sahibi",
+        logo: match.homeTeam?.logoUrl || null,
+      },
+      away: {
+        id: match.awayTeam?.id,
+        name: match.awayTeam?.name || "Deplasman",
+        logo: match.awayTeam?.logoUrl || null,
+      },
+    },
+    goals: {
+      home: match.home_score,
+      away: match.away_score,
+    },
+  };
+};
+
+
+export function MatchList({ initialMatches }: { initialMatches: MatchWithTeams[] }) {
+  const [data, setData] = useState<DisplayMatch[]>(initialMatches.map(formatMatchData) || []);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -40,7 +76,6 @@ export function MatchList({ initialMatches }: { initialMatches: any[] }) {
       setIsLoading(true);
       
       const response = await fetch("/api/ingest");
-
       const result = await response.json();
 
       if (!response.ok) {
@@ -49,21 +84,14 @@ export function MatchList({ initialMatches }: { initialMatches: any[] }) {
 
       if (!result.processed || result.processed === 0) {
         toast({ title: "Uyarı", description: "İşlenecek yeni maç bulunamadı." });
-        // We might not want to clear data if nothing new comes.
-        // setData([]); 
         return;
       }
-
-      // After a successful ingestion, we should re-fetch the data from our DB
-      // to show the newly added matches. For now, we'll just show a success message.
-      // A more complete solution would re-fetch from an action like `getMatchesWithTeams()`.
       
       toast({
         title: "Güncelleme Başarılı",
-        description: `${result.processed} adet maç işlendi ve veritabanına eklendi.`,
+        description: `${result.processed} adet maç işlendi ve veritabanına eklendi. Sayfa yenileniyor...`,
       });
       
-      // To see the new matches, we'll reload the page.
       window.location.reload();
 
     } catch (error: any) {
@@ -77,34 +105,6 @@ export function MatchList({ initialMatches }: { initialMatches: any[] }) {
       setIsLoading(false);
     }
   };
-
-  const displayData = data.map((match: any) => ({
-      fixture: {
-        id: match.id,
-        date: match.match_date,
-        status: { short: match.status }
-      },
-      league: {
-        name: "Premier League", // This is mock data until we join leagues table
-        logo: null
-      },
-      teams: {
-        home: {
-          id: match.homeTeam?.id,
-          name: match.homeTeam?.name || "Ev Sahibi",
-          logo: match.homeTeam?.logoUrl || null
-        },
-        away: {
-          id: match.awayTeam?.id,
-          name: match.awayTeam?.name || "Deplasman",
-          logo: match.awayTeam?.logoUrl || null
-        }
-      },
-      goals: {
-        home: match.home_score,
-        away: match.away_score
-      }
-    }));
 
 
   return (
@@ -121,13 +121,13 @@ export function MatchList({ initialMatches }: { initialMatches: any[] }) {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {displayData.length === 0 ? (
+        {data.length === 0 ? (
           <div className="col-span-full text-center py-10 border-2 border-dashed rounded-lg">
             <p className="text-muted-foreground mb-2">Gösterilecek maç bulunamadı.</p>
             <Button onClick={handleRefresh} variant="secondary">Verileri Getir</Button>
           </div>
         ) : (
-          displayData.map((match) => (
+          data.map((match) => (
             <Card key={match.fixture.id} className="hover:shadow-md transition-shadow cursor-pointer">
               <CardContent className="p-4">
                 <div className="flex justify-between items-start mb-4 pb-2 border-b">
@@ -138,7 +138,7 @@ export function MatchList({ initialMatches }: { initialMatches: any[] }) {
                     </Badge>
                   </div>
                   <span className="text-xs text-muted-foreground font-mono">
-                    {match.fixture.date ? format(new Date(match.fixture.date), "HH:mm") : 'TBD'}
+                    {match.fixture.date ? formatDate(toDate(match.fixture.date), "HH:mm", { timeZone: 'Europe/London' }) : 'TBD'}
                   </span>
                 </div>
                 
