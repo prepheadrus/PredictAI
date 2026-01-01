@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "../ui/button";
-import { Loader2, CheckCircle, AlertTriangle } from "lucide-react";
+import { Loader2, CheckCircle, AlertTriangle, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 
@@ -12,31 +12,35 @@ export function SyncManager() {
   const [status, setStatus] = useState<SyncStatus>("idle");
   const { toast } = useToast();
 
-  const handleSync = () => {
+  const handleSync = async () => {
     setStatus("syncing");
     toast({
       title: "Sync Started",
-      description: "Connecting to Google Sheets API...",
+      description: "Fetching latest data from API-Football...",
     });
 
-    setTimeout(() => {
-      // Simulate API call and validation
-      const success = Math.random() > 0.2; // 80% success rate
-      if (success) {
-        setStatus("success");
-        toast({
-          title: "Sync Successful",
-          description: "All data has been updated from Google Sheets.",
-        });
-      } else {
-        setStatus("error");
-        toast({
-          variant: "destructive",
-          title: "Sync Failed",
-          description: "Could not validate data. Please check sheet formats.",
-        });
+    try {
+      const response = await fetch('/api/sync');
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Sync failed');
       }
-    }, 3000);
+      
+      setStatus("success");
+      toast({
+        title: "Sync Successful",
+        description: `${result.count} matches have been updated from API-Football.`,
+      });
+
+    } catch (error: any) {
+      setStatus("error");
+      toast({
+        variant: "destructive",
+        title: "Sync Failed",
+        description: error.message || "Could not fetch or validate data.",
+      });
+    }
   };
 
   const getStatusContent = () => {
@@ -58,7 +62,7 @@ export function SyncManager() {
         };
       default:
         return {
-          icon: null,
+          icon: <RefreshCw />,
           text: "Sync Now",
         };
     }
@@ -92,7 +96,7 @@ export function SyncManager() {
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Sync Error</AlertTitle>
           <AlertDescription>
-            Failed to sync data. Please check your Google Sheet for formatting errors and try again.
+            Failed to sync data. Please check your API key and network connection.
           </AlertDescription>
         </Alert>
       )}
