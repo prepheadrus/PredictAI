@@ -82,16 +82,12 @@ export function MatchList({ initialMatches }: { initialMatches: MatchWithTeams[]
         throw new Error(result.error || `API Hatası: ${response.status}`);
       }
 
-      if (!result.processed || result.processed === 0) {
-        toast({ title: "Uyarı", description: "İşlenecek yeni maç bulunamadı." });
-        return;
-      }
-      
       toast({
         title: "Güncelleme Başarılı",
-        description: `${result.processed} adet maç işlendi ve veritabanına eklendi. Sayfa yenileniyor...`,
+        description: `${result.processed} adet maç işlendi. Sayfa yenileniyor...`,
       });
       
+      // We are refreshing the page to get the latest data from the server
       window.location.reload();
 
     } catch (error: any) {
@@ -137,7 +133,7 @@ export function MatchList({ initialMatches }: { initialMatches: MatchWithTeams[]
                       {match.league.name}
                     </Badge>
                   </div>
-                  <span className="text-xs text-muted-foreground font-mono">
+                  <span suppressHydrationWarning className="text-xs text-muted-foreground font-mono">
                     {match.fixture.date ? formatDate(toDate(match.fixture.date), "HH:mm", { timeZone: 'Europe/London' }) : 'TBD'}
                   </span>
                 </div>
