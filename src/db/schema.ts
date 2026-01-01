@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { integer, text, sqliteTable } from 'drizzle-orm/sqlite-core';
+import { integer, text, sqliteTable, real } from 'drizzle-orm/sqlite-core';
 
 export const leagues = sqliteTable('leagues', {
   id: integer('id').primaryKey(),
@@ -10,45 +10,45 @@ export const leagues = sqliteTable('leagues', {
 export const teams = sqliteTable('teams', {
   id: integer('id').primaryKey(),
   name: text('name').notNull(),
-  logoUrl: text('logo_url').notNull(),
+  league_id: integer('league_id').references(() => leagues.id),
+  logoUrl: text('logo_url'),
 });
 
 export const matches = sqliteTable('matches', {
   id: integer('id').primaryKey(),
-  homeTeamId: integer('home_team_id')
-    .notNull()
-    .references(() => teams.id),
-  awayTeamId: integer('away_team_id')
-    .notNull()
-    .references(() => teams.id),
-  leagueId: integer('league_id')
-    .notNull()
-    .references(() => leagues.id),
-  matchDate: integer('match_date', { mode: 'timestamp' }).notNull(),
+  home_team_id: integer('home_team_id').references(() => teams.id),
+  away_team_id: integer('away_team_id').references(() => teams.id),
+  match_date: integer('match_date', { mode: 'timestamp' }),
+  home_score: integer('home_score'),
+  away_score: integer('away_score'),
+  status: text('status'),
+  home_odd: real('home_odd'),
+  draw_odd: real('draw_odd'),
+  away_odd: real('away_odd'),
 });
 
 export const leaguesRelations = relations(leagues, ({ many }) => ({
-  matches: many(matches),
+  teams: many(teams),
 }));
 
-export const teamsRelations = relations(teams, ({ many }) => ({
+export const teamsRelations = relations(teams, ({ one, many }) => ({
+  league: one(leagues, {
+    fields: [teams.league_id],
+    references: [leagues.id],
+  }),
   homeMatches: many(matches, { relationName: 'homeTeam' }),
   awayMatches: many(matches, { relationName: 'awayTeam' }),
 }));
 
 export const matchesRelations = relations(matches, ({ one }) => ({
   homeTeam: one(teams, {
-    fields: [matches.homeTeamId],
+    fields: [matches.home_team_id],
     references: [teams.id],
     relationName: 'homeTeam',
   }),
   awayTeam: one(teams, {
-    fields: [matches.awayTeamId],
+    fields: [matches.away_team_id],
     references: [teams.id],
     relationName: 'awayTeam',
-  }),
-  league: one(leagues, {
-    fields: [matches.leagueId],
-    references: [leagues.id],
   }),
 }));

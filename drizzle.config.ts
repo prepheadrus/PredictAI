@@ -5,6 +5,6 @@ export default {
   schema: "./src/db/schema.ts",
   out: "./drizzle",
   dbCredentials: {
-    url: "sqlite.db",
+    url: "bahis.db",
   },
 } satisfies Config;
