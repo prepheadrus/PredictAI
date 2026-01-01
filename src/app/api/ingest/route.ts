@@ -12,6 +12,7 @@ const apiFetch = async (endpoint: string) => {
     headers: {
       'X-Auth-Token': apiKey,
     },
+    cache: 'no-store' // Ensure fresh data on every request
   });
 
   const data = await response.json();
@@ -27,7 +28,6 @@ const apiFetch = async (endpoint: string) => {
 
 export async function GET(request: NextRequest) {
   try {
-    // Tarihleri API'nin istediği yyyy-MM-dd formatına çeviriyoruz
     const today = new Date().toISOString().split('T')[0];
     const endDate = new Date(new Date().setDate(new Date().getDate() + 3)).toISOString().split('T')[0];
 
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     // PL: İngiltere, PD: İspanya, SA: İtalya, BL1: Almanya, FL1: Fransa, CL: Şampiyonlar Ligi, DED: Hollanda, PPL: Portekiz
     const competitions = "PL,PD,SA,BL1,FL1,CL,DED,PPL";
       
-    console.log(`Fetching fixtures for competitions ${competitions}...`);
+    console.log(`Fetching fixtures from ${today} to ${endDate} for competitions: ${competitions}`);
     const fixturesResponse = await apiFetch(`matches?dateFrom=${today}&dateTo=${endDate}&competitions=${competitions}`);
 
     if (!fixturesResponse || !fixturesResponse.matches || fixturesResponse.matches.length === 0) {

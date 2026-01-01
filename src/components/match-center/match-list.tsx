@@ -16,9 +16,6 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// KULLANICININ GERÇEK API ANAHTARI
-const API_KEY = "a938377027ec4af3bba0ae5a3ba19064"; 
-
 interface Match {
   fixture: {
     id: number;
@@ -64,22 +61,11 @@ export function MatchList() {
     try {
       setIsLoading(true);
       
-      const today = new Date().toISOString().split('T')[0];
-      const endDate = new Date(new Date().setDate(new Date().getDate() + 3)).toISOString().split('T')[0];
-
-      const competitions = "PL,PD,SA,BL1,FL1,CL,DED,PPL";
-      
-      const url = `https://api.football-data.org/v4/matches?dateFrom=${today}&dateTo=${endDate}&competitions=${competitions}`;
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: { 'X-Auth-Token': API_KEY },
-      });
-
+      const response = await fetch('/api/ingest');
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.message || `Hata Kodu: ${response.status}`);
+        throw new Error(result.error || `API Hatası: ${response.status}`);
       }
 
       if (!result.matches || !Array.isArray(result.matches)) {
