@@ -30,10 +30,10 @@ export function MatchList({ initialMatches }: MatchListProps) {
     setIsLoading(true);
     toast({
       title: "Data Refresh Started",
-      description: "Fetching the latest matches for the 2025 season.",
+      description: "Fetching the latest matches for the 2024 season.",
     });
     try {
-      const response = await fetch("/api/ingest?season=2025");
+      const response = await fetch("/api/ingest?season=2024");
       const result = await response.json();
       if (!response.ok) {
         throw new Error(result.error || "Failed to fetch data.");

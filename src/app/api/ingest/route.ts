@@ -3,7 +3,7 @@ import { fetchFixtures, mapAndUpsertFixtures } from '@/lib/api-football';
 
 // Default values
 const DEFAULT_LEAGUE_ID = 39; // Premier League
-const DEFAULT_SEASON = 2025; // Corresponds to 2025-2026 season
+const DEFAULT_SEASON = 2024; // Corresponds to 2024-2025 season
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
