@@ -1,6 +1,7 @@
 
 import { db } from '@/db';
 import * as schema from '@/db/schema';
+import { eq } from 'drizzle-orm';
 
 const API_URL = 'https://api.football-data.org/v4';
 
