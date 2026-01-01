@@ -1,27 +1,48 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { fetchFixtures, mapAndUpsertFixtures } from '@/lib/api-football';
 
-// Default values - Using Premier League code for football-data.org
-const DEFAULT_LEAGUE_CODE = 'PL';
-const DEFAULT_SEASON = '2024';
+const API_URL = 'https://api.football-data.org/v4';
+
+const apiFetch = async (endpoint: string) => {
+  const apiKey = process.env.FOOTBALL_DATA_API_KEY;
+  if (!apiKey) {
+    throw new Error('FOOTBALL_DATA_API_KEY is not defined in .env');
+  }
+
+  const response = await fetch(`${API_URL}/${endpoint}`, {
+    headers: {
+      'X-Auth-Token': apiKey,
+    },
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    console.error(`API call failed for endpoint: ${endpoint}. Response: ${JSON.stringify(data)}`);
+    const errorMessage = data.message || `API call failed for endpoint: ${endpoint}`;
+    throw new Error(errorMessage);
+  }
+
+  return data;
+};
+
 
 export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-  const leagueCode = searchParams.get('leagueCode') || DEFAULT_LEAGUE_CODE;
-  const season = searchParams.get('season') || DEFAULT_SEASON;
-
   try {
-    console.log(`Fetching fixtures for league ${leagueCode} in season ${season}...`);
-    const fixturesResponse = await fetchFixtures(leagueCode, season);
+    // Tarihleri API'nin istediği yyyy-MM-dd formatına çeviriyoruz
+    const today = new Date().toISOString().split('T')[0];
+    const endDate = new Date(new Date().setDate(new Date().getDate() + 3)).toISOString().split('T')[0];
+
+    // KULLANICININ HESABINDA AKTİF OLAN LİGLER
+    // PL: İngiltere, PD: İspanya, SA: İtalya, BL1: Almanya, FL1: Fransa, CL: Şampiyonlar Ligi, DED: Hollanda, PPL: Portekiz
+    const competitions = "PL,PD,SA,BL1,FL1,CL,DED,PPL";
+      
+    console.log(`Fetching fixtures for competitions ${competitions}...`);
+    const fixturesResponse = await apiFetch(`matches?dateFrom=${today}&dateTo=${endDate}&competitions=${competitions}`);
 
     if (!fixturesResponse || !fixturesResponse.matches || fixturesResponse.matches.length === 0) {
-      return NextResponse.json({ message: `No fixtures found for league ${leagueCode} in season ${season}.` });
+      return NextResponse.json({ message: `No fixtures found for competitions ${competitions}.`, matches: [] });
     }
 
-    console.log(`Upserting ${fixturesResponse.matches.length} fixtures into the database...`);
-    const count = await mapAndUpsertFixtures(fixturesResponse);
-
-    return NextResponse.json({ message: 'Ingestion complete', processed: count, leagueCode: leagueCode, season: season });
+    return NextResponse.json({ message: 'Fetch complete', matches: fixturesResponse.matches });
 
   } catch (error: any) {
     console.error('Ingestion failed:', error);

@@ -8,9 +8,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 
-// KULLANICININ GERÇEK API ANAHTARI
-const API_KEY = "a938377027ec4af3bba0ae5a3ba19064"; 
-
 interface Match {
   fixture: {
     id: number;
@@ -40,30 +37,11 @@ export function MatchList() {
     try {
       setIsLoading(true);
       
-      const today = new Date().toISOString().split('T')[0];
-      // Gelecek 3 günü tarayalım ki kesin maç bulalım
-      const endDate = new Date(new Date().setDate(new Date().getDate() + 3)).toISOString().split('T')[0];
-
-      // KULLANICININ HESABINDA AKTİF OLAN LİGLER
-      // PL: İngiltere, PD: İspanya, SA: İtalya, BL1: Almanya, FL1: Fransa, CL: Şampiyonlar Ligi, DED: Hollanda, PPL: Portekiz
-      const competitions = "PL,PD,SA,BL1,FL1,CL,DED,PPL";
-      
-      const url = `https://api.football-data.org/v4/matches?dateFrom=${today}&dateTo=${endDate}&competitions=${competitions}`;
-
-      console.log("Fetching URL:", url);
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'X-Auth-Token': API_KEY,
-        },
-      });
-
+      const response = await fetch('/api/ingest');
       const result = await response.json();
 
       if (!response.ok) {
-        // API Limiti (429) veya Yetki (403) hatası kontrolü
-        throw new Error(result.message || `Hata Kodu: ${response.status}`);
+        throw new Error(result.error || `API Hatası: ${response.status}`);
       }
 
       if (!result.matches || !Array.isArray(result.matches)) {
@@ -72,7 +50,8 @@ export function MatchList() {
         toast({ title: "Bilgi", description: "Bu tarih aralığında seçili liglerde maç yok." });
         return;
       }
-
+      
+      // The data is already formatted by the server, but we can re-map to be safe
       const formattedData = result.matches.map((match: any) => ({
         fixture: {
           id: match.id,
@@ -100,6 +79,7 @@ export function MatchList() {
           away: match.score?.fullTime?.away ?? null
         }
       }));
+
 
       setData(formattedData);
       
