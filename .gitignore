@@ -42,4 +42,8 @@ next-env.d.ts
 
 # firebase
 firebase-debug.log
-firestore-debug.log
+firestore-debug.log.env
+*.db
+bahis.db
+__pycache__/
+ml_engine/__pycache__/
