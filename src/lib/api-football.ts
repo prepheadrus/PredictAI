@@ -88,8 +88,8 @@ export async function mapAndUpsertFixtures(fixturesResponse: any) {
     let count = 0;
     for (const match of matches) {
         // Skip if team data is incomplete
-        if (!match.homeTeam?.id || !match.awayTeam?.id) {
-            console.warn(`Skipping match ${match.id} due to missing team ID.`);
+        if (!match.homeTeam?.id || !match.awayTeam?.id || !match.homeTeam?.name || !match.awayTeam?.name) {
+            console.warn(`Skipping match ${match.id} due to missing team data.`);
             continue;
         }
 
