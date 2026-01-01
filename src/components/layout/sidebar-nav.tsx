@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -16,12 +17,14 @@ import {
   Settings,
   Presentation,
   ShieldCheck,
+  ListCollapse,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const menuItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/match-center", label: "Match Center", icon: ListCollapse },
   { href: "/portfolio", label: "Portfolio", icon: BarChart3 },
   { href: "/data-management", label: "Data Management", icon: FileUp },
   { href: "/settings", label: "Settings", icon: Settings },
