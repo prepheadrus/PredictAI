@@ -34,11 +34,13 @@ export function MatchList({ initialMatches }: MatchListProps) {
     });
     try {
       // football-data.org uses league codes, e.g., 'PL' for Premier League
-      const response = await fetch("/api/ingest?leagueCode=PL");
+      const response = await fetch("/api/ingest?leagueCode=PL&season=2024");
       const result = await response.json();
+
       if (!response.ok) {
         throw new Error(result.error || "Failed to fetch data.");
       }
+      
       toast({
         title: "Refresh Complete",
         description: `${result.processed || 0} matches were ingested. The list will update shortly.`,
@@ -51,7 +53,7 @@ export function MatchList({ initialMatches }: MatchListProps) {
         title: "Refresh Failed",
         description: error.message || "Could not refresh match data.",
       });
-      console.error(error);
+      console.error("❌ Hata Detayı:", error);
     } finally {
       setIsLoading(false);
     }
