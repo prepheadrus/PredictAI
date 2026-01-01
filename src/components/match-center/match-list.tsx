@@ -1,17 +1,17 @@
-
-"use client";
-
 import { useState } from "react";
-import { format as formatDate, toDate } from "date-fns-tz";
-import { RefreshCw, Calendar, Trophy } from "lucide-react";
+import { format } from "date-fns";
+import { RefreshCw, Calendar, Trophy, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import type { MatchWithTeams } from "@/lib/types";
 
-// Veri Tipi Tanımlaması (API V4 Yapısına Uygun)
-interface DisplayMatch {
+// --- AYARLAR ---
+// BURAYA MUTLAKA KENDİ "football-data.org" API ANAHTARINI YAZMALISIN
+const API_KEY = "a938377027ec4af3bba0ae5a3ba19064"; 
+// ----------------
+
+interface Match {
   fixture: {
     id: number;
     date: string;
@@ -22,8 +22,8 @@ interface DisplayMatch {
     logo: string | null;
   };
   teams: {
-    home: { id: number | null; name: string; logo: string | null };
-    away: { id: number | null; name: string; logo: string | null };
+    home: { id: number; name: string; logo: string | null };
+    away: { id: number; name: string; logo: string | null };
   };
   goals: {
     home: number | null;
@@ -31,43 +31,8 @@ interface DisplayMatch {
   };
 }
 
-const formatMatchData = (match: any): DisplayMatch => {
-  const date = match.match_date || match.utcDate;
-  const timeZone = 'Europe/London'; // Consistent timezone
-  const formattedDate = date ? formatDate(toDate(date, { timeZone }), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", { timeZone }) : new Date().toISOString();
-
-  return {
-    fixture: {
-      id: match.id,
-      date: formattedDate,
-      status: { short: match.status },
-    },
-    league: {
-      name: "Premier League", // This is mock data until we join leagues table
-      logo: null,
-    },
-    teams: {
-      home: {
-        id: match.homeTeam?.id,
-        name: match.homeTeam?.name || "Ev Sahibi",
-        logo: match.homeTeam?.logoUrl || null,
-      },
-      away: {
-        id: match.awayTeam?.id,
-        name: match.awayTeam?.name || "Deplasman",
-        logo: match.awayTeam?.logoUrl || null,
-      },
-    },
-    goals: {
-      home: match.home_score,
-      away: match.away_score,
-    },
-  };
-};
-
-
-export function MatchList({ initialMatches }: { initialMatches: MatchWithTeams[] }) {
-  const [data, setData] = useState<DisplayMatch[]>(initialMatches.map(formatMatchData) || []);
+export function MatchList() {
+  const [data, setData] = useState<Match[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -75,52 +40,106 @@ export function MatchList({ initialMatches }: { initialMatches: MatchWithTeams[]
     try {
       setIsLoading(true);
       
-      const response = await fetch("/api/ingest");
+      const today = new Date().toISOString().split('T')[0];
+      const tomorrow = new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0];
+
+      // SADECE MAJOR LİGLERİ FİLTRELİYORUZ (Hataları önlemek için)
+      // PL: Premier League, PD: La Liga, CL: Şampiyonlar Ligi, BL1: Bundesliga, SA: Serie A, FL1: Ligue 1
+      const competitions = "PL,PD,CL,BL1,SA,FL1";
+      
+      const url = `https://api.football-data.org/v4/matches?dateFrom=${today}&dateTo=${tomorrow}&competitions=${competitions}`;
+
+      console.log("Fetching URL:", url);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-Auth-Token': API_KEY,
+        },
+      });
+
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || `API Hatası: ${response.status}`);
+        throw new Error(result.message || `API Hatası: ${response.status}`);
       }
 
+      if (!result.matches || !Array.isArray(result.matches)) {
+        console.warn("Beklenen veri formatı gelmedi:", result);
+        setData([]);
+        toast({ title: "Uyarı", description: "Bu liglerde bugün maç yok." });
+        return;
+      }
+
+      const formattedData = result.matches.map((match: any) => ({
+        fixture: {
+          id: match.id,
+          date: match.utcDate,
+          status: { short: match.status }
+        },
+        league: {
+          name: match.competition?.name || "Lig",
+          logo: match.competition?.emblem || null
+        },
+        teams: {
+          home: {
+            id: match.homeTeam?.id,
+            name: match.homeTeam?.name || "Ev Sahibi",
+            logo: match.homeTeam?.crest || null
+          },
+          away: {
+            id: match.awayTeam?.id,
+            name: match.awayTeam?.name || "Deplasman",
+            logo: match.awayTeam?.crest || null
+          }
+        },
+        goals: {
+          home: match.score?.fullTime?.home ?? null,
+          away: match.score?.fullTime?.away ?? null
+        }
+      }));
+
+      setData(formattedData);
+      
       toast({
         title: "Güncelleme Başarılı",
-        description: `${result.processed} adet maç işlendi. Sayfa yenileniyor...`,
+        description: `${formattedData.length} maç listelendi.`,
       });
-      
-      // We are refreshing the page to get the latest data from the server
-      window.location.reload();
 
     } catch (error: any) {
       console.error("Fetch Hatası:", error);
       toast({
         variant: "destructive",
         title: "Hata Oluştu",
-        description: error.message || "Veri çekilemedi.",
+        description: error.message || "Veri çekilemedi. API Key'i kontrol edin.",
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-bold flex items-center gap-2">
           <Calendar className="w-5 h-5" />
-          Maç Geçmişi
+          Fikstür (Major Ligler)
         </h2>
         <Button onClick={handleRefresh} disabled={isLoading} variant="outline" size="sm">
           <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-          {isLoading ? "Yükleniyor..." : "Veriyi Yenile"}
+          {isLoading ? "Yükleniyor..." : "Yenile"}
         </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {data.length === 0 ? (
           <div className="col-span-full text-center py-10 border-2 border-dashed rounded-lg">
-            <p className="text-muted-foreground mb-2">Gösterilecek maç bulunamadı.</p>
-            <Button onClick={handleRefresh} variant="secondary">Verileri Getir</Button>
+            <p className="text-muted-foreground mb-2">
+              {isLoading ? "Veriler yükleniyor..." : "Listelenecek maç bulunamadı."}
+            </p>
+            {!isLoading && (
+               <p className="text-xs text-muted-foreground mt-2">API Key'inizin doğru olduğundan emin olun.</p>
+            )}
           </div>
         ) : (
           data.map((match) => (
@@ -133,8 +152,9 @@ export function MatchList({ initialMatches }: { initialMatches: MatchWithTeams[]
                       {match.league.name}
                     </Badge>
                   </div>
+                  {/* HYDRATION FIX BURADA: suppressHydrationWarning eklendi */}
                   <span suppressHydrationWarning className="text-xs text-muted-foreground font-mono">
-                    {match.fixture.date ? formatDate(toDate(match.fixture.date), "HH:mm", { timeZone: 'Europe/London' }) : 'TBD'}
+                    {match.fixture.date ? format(new Date(match.fixture.date), "HH:mm") : 'TBD'}
                   </span>
                 </div>
                 
