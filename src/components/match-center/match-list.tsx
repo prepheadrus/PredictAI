@@ -34,21 +34,21 @@ export function MatchList({ initialMatches }: MatchListProps) {
     });
     try {
       const response = await fetch("/api/ingest?season=2025");
-      if (!response.ok) {
-        throw new Error("Failed to fetch data.");
-      }
       const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to fetch data.");
+      }
       toast({
         title: "Refresh Complete",
         description: `${result.processed || 0} matches were ingested. The list will update shortly.`,
       });
       // Re-fetch or just reload for simplicity in this context
       window.location.reload();
-    } catch (error) {
+    } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Refresh Failed",
-        description: "Could not refresh match data.",
+        description: error.message || "Could not refresh match data.",
       });
       console.error(error);
     } finally {

@@ -11,11 +11,13 @@ type SyncStatus = "idle" | "syncing" | "success" | "error";
 export function SyncManager() {
   const [status, setStatus] = useState<SyncStatus>("idle");
   const [processedCount, setProcessedCount] = useState<number | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleSync = async () => {
     setStatus("syncing");
     setProcessedCount(null);
+    setErrorMessage(null);
     toast({
       title: "Ingestion Started",
       description: "Fetching latest data from API-Football...",
@@ -38,6 +40,7 @@ export function SyncManager() {
 
     } catch (error: any) {
       setStatus("error");
+      setErrorMessage(error.message);
       toast({
         variant: "destructive",
         title: "Ingestion Failed",
@@ -99,7 +102,7 @@ export function SyncManager() {
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Ingestion Error</AlertTitle>
           <AlertDescription>
-            Failed to ingest data. Please check your API key and network connection.
+            {errorMessage || 'An unknown error occurred. Check the server logs.'}
           </AlertDescription>
         </Alert>
       )}
