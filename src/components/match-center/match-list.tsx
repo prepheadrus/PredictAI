@@ -1,4 +1,6 @@
 
+"use client";
+
 import { useState } from "react";
 import { format } from "date-fns";
 import { RefreshCw, Calendar, Trophy, AlertCircle } from "lucide-react";
@@ -29,7 +31,7 @@ interface Match {
 }
 
 export function MatchList({ initialMatches }: { initialMatches: any[] }) {
-  const [data, setData] = useState<Match[]>([]);
+  const [data, setData] = useState<Match[]>(initialMatches || []);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -42,50 +44,27 @@ export function MatchList({ initialMatches }: { initialMatches: any[] }) {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.message || `API Hatası: ${response.status}`);
+        throw new Error(result.error || `API Hatası: ${response.status}`);
       }
 
-      if (!result.matches || !Array.isArray(result.matches)) {
-        console.warn("Beklenen formatta veri gelmedi:", result);
-        setData([]);
-        toast({ title: "Uyarı", description: "Bu tarih aralığında maç bulunamadı." });
+      if (!result.processed || result.processed === 0) {
+        toast({ title: "Uyarı", description: "İşlenecek yeni maç bulunamadı." });
+        // We might not want to clear data if nothing new comes.
+        // setData([]); 
         return;
       }
 
-      const formattedData = result.matches.map((match: any) => ({
-        fixture: {
-          id: match.id,
-          date: match.utcDate,
-          status: { short: match.status } 
-        },
-        league: {
-          name: match.competition?.name || "Belirsiz Lig",
-          logo: match.competition?.emblem || null
-        },
-        teams: {
-          home: {
-            id: match.homeTeam?.id,
-            name: match.homeTeam?.name || "Ev Sahibi",
-            logo: match.homeTeam?.crest || null
-          },
-          away: {
-            id: match.awayTeam?.id,
-            name: match.awayTeam?.name || "Deplasman",
-            logo: match.awayTeam?.crest || null
-          }
-        },
-        goals: {
-          home: match.score?.fullTime?.home ?? null,
-          away: match.score?.fullTime?.away ?? null
-        }
-      }));
-
-      setData(formattedData);
+      // After a successful ingestion, we should re-fetch the data from our DB
+      // to show the newly added matches. For now, we'll just show a success message.
+      // A more complete solution would re-fetch from an action like `getMatchesWithTeams()`.
       
       toast({
         title: "Güncelleme Başarılı",
-        description: `${formattedData.length} adet maç listelendi.`,
+        description: `${result.processed} adet maç işlendi ve veritabanına eklendi.`,
       });
+      
+      // To see the new matches, we'll reload the page.
+      window.location.reload();
 
     } catch (error: any) {
       console.error("Fetch Hatası:", error);
@@ -99,27 +78,56 @@ export function MatchList({ initialMatches }: { initialMatches: any[] }) {
     }
   };
 
+  const displayData = data.map((match: any) => ({
+      fixture: {
+        id: match.id,
+        date: match.match_date,
+        status: { short: match.status }
+      },
+      league: {
+        name: "Premier League", // This is mock data until we join leagues table
+        logo: null
+      },
+      teams: {
+        home: {
+          id: match.homeTeam?.id,
+          name: match.homeTeam?.name || "Ev Sahibi",
+          logo: match.homeTeam?.logoUrl || null
+        },
+        away: {
+          id: match.awayTeam?.id,
+          name: match.awayTeam?.name || "Deplasman",
+          logo: match.awayTeam?.logoUrl || null
+        }
+      },
+      goals: {
+        home: match.home_score,
+        away: match.away_score
+      }
+    }));
+
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-bold flex items-center gap-2">
           <Calendar className="w-5 h-5" />
-          Fikstür (Canlı/Yaklaşan)
+          Maç Geçmişi
         </h2>
         <Button onClick={handleRefresh} disabled={isLoading} variant="outline" size="sm">
           <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-          {isLoading ? "Yükleniyor..." : "Yenile"}
+          {isLoading ? "Yükleniyor..." : "Veriyi Yenile"}
         </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {data.length === 0 ? (
+        {displayData.length === 0 ? (
           <div className="col-span-full text-center py-10 border-2 border-dashed rounded-lg">
             <p className="text-muted-foreground mb-2">Gösterilecek maç bulunamadı.</p>
             <Button onClick={handleRefresh} variant="secondary">Verileri Getir</Button>
           </div>
         ) : (
-          data.map((match) => (
+          displayData.map((match) => (
             <Card key={match.fixture.id} className="hover:shadow-md transition-shadow cursor-pointer">
               <CardContent className="p-4">
                 <div className="flex justify-between items-start mb-4 pb-2 border-b">
@@ -130,7 +138,7 @@ export function MatchList({ initialMatches }: { initialMatches: any[] }) {
                     </Badge>
                   </div>
                   <span className="text-xs text-muted-foreground font-mono">
-                    {format(new Date(match.fixture.date), "HH:mm")}
+                    {match.fixture.date ? format(new Date(match.fixture.date), "HH:mm") : 'TBD'}
                   </span>
                 </div>
                 
