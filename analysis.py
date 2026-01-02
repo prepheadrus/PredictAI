@@ -43,9 +43,7 @@ def detailed_analysis(stats):
     away_xg_poisson = away_attack_strength * home_defense_strength * stats['league_avg_away_goals']
     
     # --- 2. Injury Model ---
-    # Apply a simple weakening factor based on number of injured players.
-    # Each injured player reduces the team's xG by a small percentage.
-    injury_factor = 0.04 # 4% reduction per player
+    injury_factor = 0.04 
     injuries = stats.get('injuries', {'home': 0, 'away': 0})
     home_injuries = injuries.get('home', 0)
     away_injuries = injuries.get('away', 0)
@@ -66,9 +64,8 @@ def detailed_analysis(stats):
             odds_probs['away_win'] = (1/odds['away']) / total_implied
 
     # --- 4. Form Model ---
-    home_form_raw = stats.get('home_form', [])
-    away_form_raw = stats.get('away_form', [])
-    # Extract the 'result' string from the list of dicts
+    home_form_raw = stats.get('home_form_raw', [])
+    away_form_raw = stats.get('away_form_raw', [])
     home_form = [item['result'] for item in home_form_raw if 'result' in item]
     away_form = [item['result'] for item in away_form_raw if 'result' in item]
     
@@ -79,24 +76,32 @@ def detailed_analysis(stats):
     form_probs = {'home_win': 0.33, 'draw': 0.33, 'away_win': 0.33}
     total_form_score = home_form_score + away_form_score
     if total_form_score > 0:
-        form_probs['home_win'] = 0.40 * (home_form_score / total_form_score) + 0.15
-        form_probs['away_win'] = 0.40 * (away_form_score / total_form_score) + 0.05
-        form_probs['draw'] = 1 - form_probs['home_win'] - form_probs['away_win']
+        home_form_adv = 0.55 # Small home advantage factor in form calculation
+        total_points_for_dist = home_form_score + away_form_score
+        if total_points_for_dist > 0:
+            form_probs['home_win'] = (home_form_score / total_points_for_dist) * (1 - home_form_adv) + home_form_adv * 0.5
+            form_probs['away_win'] = (away_form_score / total_points_for_dist) * (1- home_form_adv)
+            form_probs['draw'] = 1 - form_probs['home_win'] - form_probs['away_win']
+
 
     # --- 5. Hybrid Model (Weighted Average) ---
-    # Weights: Poisson (50%), Odds (30%), Form (20%)
-    final_home_win = (poisson_probs['home_win'] * 0.5) + (odds_probs['home_win'] * 0.3) + (form_probs['home_win'] * 0.2)
-    final_draw = (poisson_probs['draw'] * 0.5) + (odds_probs['draw'] * 0.3) + (form_probs['draw'] * 0.2)
-    final_away_win = (poisson_probs['away_win'] * 0.5) + (odds_probs['away_win'] * 0.3) + (form_probs['away_win'] * 0.2)
+    weights = {'poisson': 0.5, 'odds': 0.3, 'form': 0.2}
+    # If odds are not available, re-distribute its weight to poisson and form
+    if not odds_probs['home_win']:
+        weights['poisson'] += 0.2
+        weights['form'] += 0.1
+        weights['odds'] = 0
 
-    # Normalize final probabilities
+    final_home_win = (poisson_probs['home_win'] * weights['poisson']) + (odds_probs['home_win'] * weights['odds']) + (form_probs['home_win'] * weights['form'])
+    final_draw = (poisson_probs['draw'] * weights['poisson']) + (odds_probs['draw'] * weights['odds']) + (form_probs['draw'] * weights['form'])
+    final_away_win = (poisson_probs['away_win'] * weights['poisson']) + (odds_probs['away_win'] * weights['odds']) + (form_probs['away_win'] * weights['form'])
+
     total_final_prob = final_home_win + final_draw + final_away_win
     if total_final_prob > 0:
         final_home_win /= total_final_prob
         final_draw /= total_final_prob
         final_away_win /= total_final_prob
 
-    # --- Final Prediction and Confidence ---
     _, _, _, most_likely_score, max_prob = calculate_outcome_probabilities(home_xg_poisson, away_xg_poisson, return_details=True)
     confidence = (max(final_home_win, final_draw, final_away_win) - (1/3)) * 150 
     confidence = min(99.0, max(10.0, confidence))
@@ -131,7 +136,6 @@ def calculate_outcome_probabilities(home_xg, away_xg, return_details=False):
     home_goal_probs = [poisson_probability(i, home_xg) for i in range(7)]
     away_goal_probs = [poisson_probability(i, away_xg) for i in range(7)]
 
-    # Normalize probabilities to sum to 1
     sum_home = sum(home_goal_probs)
     sum_away = sum(away_goal_probs)
     if sum_home > 0: home_goal_probs = [p / sum_home for p in home_goal_probs]
@@ -143,14 +147,13 @@ def calculate_outcome_probabilities(home_xg, away_xg, return_details=False):
     for h in range(7):
         for a in range(7):
             prob = home_goal_probs[h] * away_goal_probs[a]
+            if prob > max_prob:
+                max_prob = prob
+                most_likely_score = [h, a]
             if h > a: home_win_prob += prob
             elif h == a: draw_prob += prob
             else: away_win_prob += prob
             
-            if prob > max_prob:
-                max_prob = prob
-                most_likely_score = [h, a]
-
     total_prob = home_win_prob + draw_prob + away_win_prob
     if total_prob > 0:
         home_win_prob /= total_prob
@@ -192,7 +195,6 @@ if __name__ == "__main__":
     try:
         if len(sys.argv) == 2 and sys.argv[1].startswith('{'):
             stats = json.loads(sys.argv[1])
-            # If we don't have enough data for a detailed analysis, run the fallback.
             if stats.get("is_simulation", True):
                 print(fallback_analysis(stats.get("home_name", "Team A"), stats.get("away_name", "Team B")))
             else:
