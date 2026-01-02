@@ -21,7 +21,7 @@ function runPythonAnalysis(home: string, away: string, league: string): Promise<
     const pythonExecutable = 'python3';
     const scriptPath = path.join(process.cwd(), 'analysis.py');
 
-    const pythonProcess = spawn(pythonExecutable, [scriptPath, home, away, league]);
+    const pythonProcess = spawn(pythonExecutable, [scriptPath, home, away, league], { shell: true });
 
     let stdout = '';
     let stderr = '';
