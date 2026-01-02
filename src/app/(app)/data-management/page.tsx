@@ -29,7 +29,7 @@ const validationRules = [
 
 export default function DataManagementPage() {
   return (
-    <div className="container mx-auto py-8 px-4 md:px-6">
+    <div className="container mx-auto px-4 md:px-6">
       <PageHeader
         title="Data Management"
         description="Manage and synchronize your football data from Google Sheets."
