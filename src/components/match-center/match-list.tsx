@@ -90,6 +90,10 @@ export function MatchList() {
   const [predictionError, setPredictionError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const { toast } = useToast();
+  
+  const [homeTeamForm, setHomeTeamForm] = useState<FormResult[] | null>(null);
+  const [awayTeamForm, setAwayTeamForm] = useState<FormResult[] | null>(null);
+  const [isFormLoading, setIsFormLoading] = useState(false);
 
   const handleRefresh = async () => {
     setIsLoading(true);
@@ -149,7 +153,7 @@ export function MatchList() {
     }
   };
   
-  const handleCardClick = (match: AnalyzedMatch) => {
+  const handleCardClick = async (match: AnalyzedMatch) => {
     if (!match.analysis) {
         toast({
             variant: "destructive",
@@ -161,6 +165,29 @@ export function MatchList() {
     setSelectedMatch(match);
     setIsModalOpen(true);
     setPredictionError(null);
+    setIsFormLoading(true);
+    setHomeTeamForm(null);
+    setAwayTeamForm(null);
+
+    try {
+        const [homeFormRes, awayFormRes] = await Promise.all([
+            fetch(`/api/team-form?teamId=${match.teams.home.id}`),
+            fetch(`/api/team-form?teamId=${match.teams.away.id}`)
+        ]);
+
+        if (homeFormRes.ok) {
+            const homeData = await homeFormRes.json();
+            setHomeTeamForm(homeData);
+        }
+         if (awayFormRes.ok) {
+            const awayData = await awayFormRes.json();
+            setAwayTeamForm(awayData);
+        }
+    } catch (error) {
+        console.error("Failed to fetch team forms", error);
+    } finally {
+        setIsFormLoading(false);
+    }
   };
 
   const sortedData = useMemo(() => {
@@ -177,22 +204,6 @@ export function MatchList() {
     { name: 'Hücum Gücü', home: selectedMatch.analysis.mathAnalysis.stats.home_attack, away: selectedMatch.analysis.mathAnalysis.stats.away_attack },
     { name: 'Savunma Gücü', home: selectedMatch.analysis.mathAnalysis.stats.home_defense, away: selectedMatch.analysis.mathAnalysis.stats.away_defense },
   ] : [];
-
-  // Mock form data with details
-  const homeTeamForm: FormResult[] = [
-      { result: 'W', opponentName: 'OGC Nice', score: '2-1' },
-      { result: 'D', opponentName: 'PSG', score: '1-1' },
-      { result: 'W', opponentName: 'FC Lorient', score: '3-0' },
-      { result: 'L', opponentName: 'AS Monaco', score: '1-2' },
-      { result: 'W', opponentName: 'Stade Rennais', score: '1-0' },
-  ];
-  const awayTeamForm: FormResult[] = [
-      { result: 'L', opponentName: 'LOSC Lille', score: '0-1' },
-      { result: 'D', opponentName: 'Olympique Lyonnais', score: '2-2' },
-      { result: 'W', opponentName: 'Stade de Reims', score: '2-0' },
-      { result: 'W', opponentName: 'FC Nantes', score: '3-1' },
-      { result: 'L', opponentName: 'RC Strasbourg', score: '1-2' },
-  ];
 
 
   return (
@@ -340,10 +351,17 @@ export function MatchList() {
 
                 <div className="md:col-span-2">
                     <h3 className="font-semibold text-primary flex items-center gap-2 mb-4"><Flame size={18}/> Form Durumu</h3>
-                    <div className="space-y-4">
-                        <TeamForm form={homeTeamForm} teamName={selectedMatch.teams.home.name} />
-                        <TeamForm form={awayTeamForm} teamName={selectedMatch.teams.away.name} />
-                    </div>
+                     {isFormLoading ? (
+                        <div className="space-y-4">
+                            <Skeleton className="h-10 w-full" />
+                            <Skeleton className="h-10 w-full" />
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {homeTeamForm && <TeamForm form={homeTeamForm} teamName={selectedMatch.teams.home.name} />}
+                            {awayTeamForm && <TeamForm form={awayTeamForm} teamName={selectedMatch.teams.away.name} />}
+                        </div>
+                    )}
                 </div>
             </div>
           )}
