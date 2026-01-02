@@ -232,9 +232,9 @@ export function MatchList() {
                         <span className="font-medium text-muted-foreground flex items-center gap-2"><Target size={16}/> Tahmini Skor</span>
                         <span className="font-bold text-lg font-mono">{prediction.mathAnalysis.score_prediction}</span>
                     </div>
-                     <div className="flex justify-between items-center bg-accent/10 text-accent-foreground p-3 rounded-lg border border-accent/20">
-                        <span className="font-medium flex items-center gap-2"><Zap size={16}/> Güven Skoru</span>
-                        <span className="font-bold text-lg">{prediction.mathAnalysis.confidence}%</span>
+                     <div className="flex justify-between items-center bg-card p-3 rounded-lg border">
+                        <span className="font-medium text-accent flex items-center gap-2"><Zap size={16}/> Güven Skoru</span>
+                        <span className="font-bold text-lg text-accent">{prediction.mathAnalysis.confidence}%</span>
                     </div>
                 </div>
 
