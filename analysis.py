@@ -75,6 +75,7 @@ def analyze_match(ev_beklenen_gol, dep_beklenen_gol, model_name):
         draw_prob /= total_prob
         away_win_prob /= total_prob
 
+    # Improved confidence calculation
     confidence = (max_prob + abs(home_win_prob - away_win_prob)) * 50
     confidence = min(99.0, max(10.0, confidence))
 

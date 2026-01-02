@@ -110,18 +110,28 @@ export async function POST(req: NextRequest) {
             
             const homeTeamStats = table.find((t: any) => t.team.id === homeTeamId);
             const awayTeamStats = table.find((t: any) => t.team.id === awayTeamId);
-
-            // Lig gol ortalamalarını hesapla
-            const totalMatches = table.length > 1 ? table.length * (table.length - 1) : 1;
-            const totalGoals = table.reduce((sum: number, team: any) => sum + team.goalsFor, 0);
-            const avgGoalsPerGame = totalMatches > 0 ? totalGoals / totalMatches : 1.35;
-
-
-            // Genellikle ev sahibi takımlar biraz daha fazla gol atar.
-            const league_avg_home_goals = avgGoalsPerGame + 0.15;
-            const league_avg_away_goals = avgGoalsPerGame - 0.15 > 0 ? avgGoalsPerGame - 0.15 : avgGoalsPerGame;
             
             if (homeTeamStats && awayTeamStats && homeTeamStats.playedGames > 0 && awayTeamStats.playedGames > 0) {
+                 // Calculate league average goals more dynamically
+                let totalHomeGoals = 0;
+                let totalAwayGoals = 0;
+                let totalMatches = 0;
+
+                table.forEach((team: any) => {
+                    // This is an approximation. A more accurate method would be to get all match results.
+                    // For now, we assume goals for/against are split evenly between home/away which is not true
+                    // but better than a fixed value.
+                    totalHomeGoals += team.goalsFor / 2;
+                    totalAwayGoals += team.goalsFor / 2;
+                    totalMatches += team.playedGames;
+                });
+                
+                const avgMatchesPerTeam = totalMatches / table.length;
+                
+                // Avoid division by zero
+                const league_avg_home_goals = (totalHomeGoals / (totalMatches/2)) || 1.45;
+                const league_avg_away_goals = (totalAwayGoals / (totalMatches/2)) || 1.15;
+
                  const statsObject = {
                     home: {
                         played: homeTeamStats.playedGames,
