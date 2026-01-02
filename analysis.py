@@ -10,7 +10,6 @@ def poisson_probability(actual, mean):
     try:
         return (mean**actual * math.exp(-mean)) / math.factorial(actual)
     except (OverflowError, ValueError):
-        # Return 0 for large numbers where calculation isn't feasible
         return 0
 
 def get_team_strength(team_name):
@@ -29,7 +28,7 @@ def fallback_analysis(ev_sahibi, deplasman):
 
 def detailed_analysis(stats):
     """
-    Analysis based on a hybrid model combining Poisson, Odds, and Form.
+    Analysis based on a hybrid model combining Poisson, Odds, Form, and Injuries.
     """
     home_stats = stats['home']
     away_stats = stats['away']
@@ -43,9 +42,20 @@ def detailed_analysis(stats):
     home_xg_poisson = home_attack_strength * away_defense_strength * stats['league_avg_home_goals']
     away_xg_poisson = away_attack_strength * home_defense_strength * stats['league_avg_away_goals']
     
+    # --- 2. Injury Model ---
+    # Apply a simple weakening factor based on number of injured players.
+    # Each injured player reduces the team's xG by a small percentage.
+    injury_factor = 0.04 # 4% reduction per player
+    injuries = stats.get('injuries', {'home': 0, 'away': 0})
+    home_injuries = injuries.get('home', 0)
+    away_injuries = injuries.get('away', 0)
+    
+    home_xg_poisson *= (1 - (home_injuries * injury_factor))
+    away_xg_poisson *= (1 - (away_injuries * injury_factor))
+
     poisson_probs = calculate_outcome_probabilities(home_xg_poisson, away_xg_poisson)
 
-    # --- 2. Odds Model ---
+    # --- 3. Odds Model ---
     odds = stats.get('odds', {})
     odds_probs = {'home_win': 0, 'draw': 0, 'away_win': 0}
     if all(k in odds for k in ['home', 'draw', 'away']) and all(v > 0 for v in odds.values()):
@@ -55,8 +65,8 @@ def detailed_analysis(stats):
             odds_probs['draw'] = (1/odds['draw']) / total_implied
             odds_probs['away_win'] = (1/odds['away']) / total_implied
 
-    # --- 3. Form Model ---
-    home_form = stats.get('home_form', []) # Expected: ['W', 'D', 'L', 'W', 'W']
+    # --- 4. Form Model ---
+    home_form = stats.get('home_form', [])
     away_form = stats.get('away_form', [])
     form_points = {'W': 3, 'D': 1, 'L': 0}
     home_form_score = sum(form_points.get(r['result'], 0) for r in home_form)
@@ -65,13 +75,11 @@ def detailed_analysis(stats):
     form_probs = {'home_win': 0.33, 'draw': 0.33, 'away_win': 0.33}
     total_form_score = home_form_score + away_form_score
     if total_form_score > 0:
-        # Simple weighted probability based on form points
-        form_probs['home_win'] = 0.40 * (home_form_score / total_form_score) + 0.15 # Add slight home advantage
+        form_probs['home_win'] = 0.40 * (home_form_score / total_form_score) + 0.15
         form_probs['away_win'] = 0.40 * (away_form_score / total_form_score) + 0.05
         form_probs['draw'] = 1 - form_probs['home_win'] - form_probs['away_win']
 
-
-    # --- 4. Hybrid Model (Weighted Average) ---
+    # --- 5. Hybrid Model (Weighted Average) ---
     # Weights: Poisson (50%), Odds (30%), Form (20%)
     final_home_win = (poisson_probs['home_win'] * 0.5) + (odds_probs['home_win'] * 0.3) + (form_probs['home_win'] * 0.2)
     final_draw = (poisson_probs['draw'] * 0.5) + (odds_probs['draw'] * 0.3) + (form_probs['draw'] * 0.2)
@@ -85,10 +93,7 @@ def detailed_analysis(stats):
         final_away_win /= total_final_prob
 
     # --- Final Prediction and Confidence ---
-    # Use original poisson model for score prediction, but final probabilities for outcome
     _, _, _, most_likely_score, max_prob = calculate_outcome_probabilities(home_xg_poisson, away_xg_poisson, return_details=True)
-
-    # Confidence is now based on the clarity of the HYBRID model's result
     confidence = (max(final_home_win, final_draw, final_away_win) - (1/3)) * 150 
     confidence = min(99.0, max(10.0, confidence))
 
@@ -100,11 +105,13 @@ def detailed_analysis(stats):
         "home_xg_poisson": round(home_xg_poisson, 2),
         "away_xg_poisson": round(away_xg_poisson, 2),
         "home_form_points": home_form_score,
-        "away_form_points": away_form_score
+        "away_form_points": away_form_score,
+        "home_injuries": home_injuries,
+        "away_injuries": away_injuries
     }
     
     sonuc = {
-        "math_model": "Hybrid (Poisson, Odds, Form)",
+        "math_model": "Hybrid (Poisson, Odds, Form, Injury)",
         "home_win": round(final_home_win * 100, 1),
         "draw": round(final_draw * 100, 1),
         "away_win": round(final_away_win * 100, 1),
@@ -185,15 +192,10 @@ if __name__ == "__main__":
             if stats.get("is_simulation", True):
                 print(fallback_analysis(stats.get("home_name", "Team A"), stats.get("away_name", "Team B")))
             else:
-                # detailed_analysis is now the main entry point for the hybrid model
                 print(detailed_analysis(stats))
         else:
-            # Default case if no args are passed
             print(fallback_analysis("Team A", "Team B"))
             
     except Exception as e:
         import traceback
-        # Return a JSON error to be parsed by the Node.js backend
         print(json.dumps({"error": str(e), "trace": traceback.format_exc()}))
-
-    
