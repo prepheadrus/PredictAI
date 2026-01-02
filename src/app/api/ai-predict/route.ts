@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { spawn } from "child_process";
 
@@ -119,42 +118,58 @@ export async function POST(request: Request) {
     }
 
     // 2. PYTHON HESAPLAMASI (MATEMATİK)
-    const pythonProcess = spawn('python3.11', ['analysis.py', JSON.stringify(pythonInputData)]);
+    const pythonPromise = new Promise((resolve, reject) => {
+      const pythonProcess = spawn('python3.11', ['analysis.py', JSON.stringify(pythonInputData)]);
+      
+      let stdoutData = "";
+      let stderrData = "";
 
-    let pythonDataString = "";
-    for await (const chunk of pythonProcess.stdout) {
-      pythonDataString += chunk;
-    }
-     let errorString = "";
-    for await (const chunk of pythonProcess.stderr) {
-      errorString += chunk;
-    }
+      pythonProcess.stdout.on('data', (data) => { stdoutData += data.toString(); });
+      pythonProcess.stderr.on('data', (data) => { stderrData += data.toString(); });
 
-    let predictionResult;
-    try {
-      predictionResult = JSON.parse(pythonDataString);
-       if (predictionResult.error || errorString) {
-         console.error("Python Error:", errorString || predictionResult.error);
-         throw new Error(errorString || predictionResult.error);
-       }
-    } catch (e) {
-      console.error("Hesaplama veya Parse Hatası:", e);
-      return NextResponse.json({ error: "Hesaplama Hatası" }, { status: 500 });
-    }
-
-    // 3. STATİK YORUM ÜRETME
-    const staticComment = generateStaticComment(predictionResult, homeTeam, awayTeam);
-
-    // Frontend yapısını bozmamak için 'gemini_comment' anahtarı ile gönderiyoruz
-    return NextResponse.json({
-      mathAnalysis: predictionResult,
-      aiInterpretation: staticComment 
+      pythonProcess.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(stderrData || `Python exit code: ${code}`));
+        } else {
+          resolve(stdoutData);
+        }
+      });
+      
+      pythonProcess.on('error', (err) => {
+        reject(new Error(`Spawn Hatası: ${err.message}`));
+      });
     });
+
+    try {
+      const pythonOutput = await pythonPromise as string;
+      
+      let predictionResult;
+      try {
+        predictionResult = JSON.parse(pythonOutput);
+        if (predictionResult.error) {
+            // Python'un kendi döndürdüğü JSON hatası
+            throw new Error(predictionResult.error);
+        }
+
+      } catch (parseError) {
+        // Eğer parse işlemi başarısız olursa, gelen ham çıktıyı hata olarak fırlat
+        throw new Error(`JSON Parse Hatası. Gelen Veri: ${pythonOutput.substring(0, 200)}`);
+      }
+
+      const staticComment = generateStaticComment(predictionResult, homeTeam, awayTeam);
+
+      return NextResponse.json({
+          mathAnalysis: predictionResult,
+          aiInterpretation: staticComment 
+      });
+
+    } catch (pythonError: any) {
+        console.error("Python Çalıştırma veya Parse Hatası:", pythonError.message);
+        return NextResponse.json({ error: `Python Hatası: ${pythonError.message}` }, { status: 500 });
+    }
 
   } catch (error: any) {
     console.error("Sunucu Hatası:", error);
     return NextResponse.json({ error: error.message || "Sunucu hatası" }, { status: 500 });
   }
 }
-
-    

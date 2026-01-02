@@ -15,6 +15,9 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { AlertTriangle } from "lucide-react";
+
 
 interface Match {
   fixture: {
@@ -56,6 +59,7 @@ export function MatchList() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [prediction, setPrediction] = useState<PredictionResult | null>(null);
+  const [predictionError, setPredictionError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleRefresh = async () => {
@@ -99,6 +103,8 @@ export function MatchList() {
     setIsModalOpen(true);
     setIsPredicting(true);
     setPrediction(null);
+    setPredictionError(null);
+
     try {
         const response = await fetch('/api/ai-predict', {
             method: 'POST',
@@ -106,21 +112,18 @@ export function MatchList() {
             body: JSON.stringify({
                 homeTeam: match.teams.home.name,
                 awayTeam: match.teams.away.name,
-                homeTeamId: match.teams.home.id,
-                awayTeamId: match.teams.away.id,
-                leagueName: match.league.name,
-                leagueId: match.league.id,
+                homeId: match.teams.home.id,
+                awayId: match.teams.away.id,
+                league: match.league.name,
             }),
         });
+        const result = await response.json();
         if (!response.ok) {
-            const errorResult = await response.json();
-            throw new Error(errorResult.error || 'Tahmin alınamadı.');
+            throw new Error(result.error || 'Tahmin alınamadı.');
         }
-        const result: PredictionResult = await response.json();
         setPrediction(result);
     } catch (error: any) {
-        toast({ variant: 'destructive', title: 'Tahmin Hatası', description: error.message });
-        // Don't close modal on error so user can see something went wrong
+        setPredictionError(error.message);
     } finally {
         setIsPredicting(false);
     }
@@ -185,7 +188,7 @@ export function MatchList() {
               {selectedMatch ? `${selectedMatch.teams.home.name} vs ${selectedMatch.teams.away.name}` : 'Analiz'}
             </DialogTitle>
             <DialogDescription>
-              Matematiksel model ve yapay zeka yorumunun birleşimi.
+              Matematiksel model ve kural tabanlı yorumun birleşimi.
             </DialogDescription>
           </DialogHeader>
           {isPredicting ? (
@@ -202,6 +205,16 @@ export function MatchList() {
                     <Skeleton className="h-4 w-full" />
                 </div>
              </div>
+          ) : predictionError ? (
+            <Alert variant="destructive" className="my-4">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Tahmin Hatası</AlertTitle>
+                <AlertDescription>
+                    <pre className="mt-2 w-full whitespace-pre-wrap rounded-md bg-slate-950 p-4 font-mono text-xs text-slate-50">
+                    {predictionError}
+                    </pre>
+                </AlertDescription>
+            </Alert>
           ) : prediction && (
             <div className="grid md:grid-cols-2 gap-x-8 gap-y-6 py-4 text-sm">
                 {/* Matematiksel Analiz */}
@@ -227,7 +240,7 @@ export function MatchList() {
 
                 {/* AI Yorumu */}
                 <div className="space-y-3">
-                     <h3 className="font-semibold text-primary flex items-center gap-2"><Bot size={18}/> Yapay Zeka Yorumu</h3>
+                     <h3 className="font-semibold text-primary flex items-center gap-2"><Bot size={18}/> Kural Tabanlı Yorum</h3>
                      <p className="text-muted-foreground leading-relaxed bg-muted/50 p-4 rounded-lg border">
                         {prediction.aiInterpretation}
                      </p>
