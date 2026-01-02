@@ -6,11 +6,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-muted/40">
         <SidebarNav />
-        <div className="flex flex-col sm:pl-14 w-full">
-          <main className="flex-1 items-start gap-4 p-4 sm:px-6 md:gap-8">
+        <main className="flex flex-col flex-1 sm:pl-14">
+          <div className="flex-1 overflow-auto p-4 sm:px-6 md:gap-8">
             {children}
-          </main>
-        </div>
+          </div>
+        </main>
       </div>
     </SidebarProvider>
   );
