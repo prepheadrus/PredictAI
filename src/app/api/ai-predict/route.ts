@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     console.log(`🧮 ANALİZ (NO-AI): ${homeTeam} vs ${awayTeam}`);
 
     const leagueCode = LEAGUE_MAP[league] || "PL";
-    let pythonInputData = { is_simulation: true, home_name: homeTeam, away_name: awayTeam };
+    let pythonInputData: object = { is_simulation: true, home_name: homeTeam, away_name: awayTeam };
 
     // 1. GERÇEK VERİYİ ÇEK (Puan Durumu)
     try {
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
         const league_avg_away_goals = (totalAwayGoals / totalMatches) || 1.15;
 
 
-        if (homeStats && awayStats && homeStats.played > 0 && awayStats.played > 0) {
+        if (homeStats && awayStats && homeStats.playedGames > 0 && awayStats.playedGames > 0) {
           pythonInputData = {
             is_simulation: false,
             home: { played: homeStats.playedGames, goals_for: homeStats.goalsFor, goals_against: homeStats.goalsAgainst },
