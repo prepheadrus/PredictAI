@@ -23,8 +23,8 @@ function generateStaticComment(result: any, homeTeam: string, awayTeam: string) 
   const aw = result.away_win;
   const draw = result.draw;
   const score = result.score_prediction;
-  const homeXG = result.stats?.home_xg || 0;
-  const awayXG = result.stats?.away_xg || 0;
+  const homeXG = result.stats?.home_xg || result.stats?.home_xg_poisson || 0;
+  const awayXG = result.stats?.away_xg || result.stats?.away_xg_poisson || 0;
 
   let comment = "";
 
@@ -62,63 +62,93 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { homeTeam, awayTeam, league, homeId, awayId } = body;
 
-    console.log(`🧮 ANALİZ (NO-AI): ${homeTeam} vs ${awayTeam}`);
+    console.log(`🧮 ANALİZ (HIBRT): ${homeTeam} vs ${awayTeam}`);
 
     const leagueCode = LEAGUE_MAP[league] || "PL";
-    let pythonInputData: object = { is_simulation: true, home_name: homeTeam, away_name: awayTeam };
+    let pythonInputData: any = { is_simulation: true, home_name: homeTeam, away_name: awayTeam };
 
-    // 1. GERÇEK VERİYİ ÇEK (Puan Durumu)
+    // HİBRİT MODEL İÇİN VERİ TOPLAMA
     try {
+      // Puan Durumu, Form ve Oranlar için paralel istekler
       const standingsUrl = `https://api.football-data.org/v4/competitions/${leagueCode}/standings`;
-      const standingsRes = await fetch(standingsUrl, {
-        headers: { "X-Auth-Token": FOOTBALL_API_KEY },
-        next: { revalidate: 3600 }
-      });
+      const homeFormUrl = `https://api.football-data.org/v4/teams/${homeId}/matches?status=FINISHED&limit=5`;
+      const awayFormUrl = `https://api.football-data.org/v4/teams/${awayId}/matches?status=FINISHED&limit=5`;
+      const oddsUrl = `https://api.football-data.org/v4/matches?competitions=${leagueCode}&status=SCHEDULED`;
 
+
+      const [standingsRes, homeFormRes, awayFormRes, oddsRes] = await Promise.all([
+        fetch(standingsUrl, { headers: { "X-Auth-Token": FOOTBALL_API_KEY }, next: { revalidate: 3600 } }),
+        fetch(homeFormUrl, { headers: { "X-Auth-Token": FOOTBALL_API_KEY }, next: { revalidate: 3600 } }),
+        fetch(awayFormUrl, { headers: { "X-Auth-Token": FOOTBALL_API_KEY }, next: { revalidate: 3600 } }),
+        fetch(oddsUrl, { headers: { "X-Auth-Token": FOOTBALL_API_KEY }, next: { revalidate: 3600 } })
+      ]);
+      
+      let homeStats, awayStats, league_avg_home_goals, league_avg_away_goals;
+      let home_form:any[] = [], away_form:any[] = [];
+      let odds = {};
+
+      // 1. Puan Durumu ve Lig Ortalamaları
       if (standingsRes.ok) {
         const standingsData = await standingsRes.json();
         const table = standingsData.standings?.[0]?.table || [];
-
-        // ID veya İsim ile Eşleştirme
-        let homeStats = table.find((t: any) => t.team.id === homeId);
-        let awayStats = table.find((t: any) => t.team.id === awayId);
         
-        // ID bulamazsa isme bak
-        if (!homeStats) homeStats = table.find((t: any) => t.team.name.includes(homeTeam) || homeTeam.includes(t.team.name));
-        if (!awayStats) awayStats = table.find((t: any) => t.team.name.includes(awayTeam) || awayTeam.includes(t.team.name));
+        homeStats = table.find((t: any) => t.team.id === homeId) || table.find((t: any) => t.team.name.includes(homeTeam));
+        awayStats = table.find((t: any) => t.team.id === awayId) || table.find((t: any) => t.team.name.includes(awayTeam));
         
-        let totalHomeGoals = 0;
-        let totalAwayGoals = 0;
-        let totalMatches = 0;
-
+        let totalHomeGoals = 0, totalAwayGoals = 0, totalMatches = 0;
         table.forEach((team: any) => {
             totalHomeGoals += team.goalsFor; // Bu aslında toplam gol, sadece bir ortalama için kullanılıyor
             totalAwayGoals += team.goalsAgainst; 
             totalMatches += team.playedGames;
         });
 
-        const numTeams = table.length > 0 ? table.length : 1;
-        const avgMatchesPerTeam = totalMatches / numTeams;
-        
-        const league_avg_home_goals = (totalHomeGoals / totalMatches) || 1.45;
-        const league_avg_away_goals = (totalAwayGoals / totalMatches) || 1.15;
-
-
-        if (homeStats && awayStats && homeStats.playedGames > 0 && awayStats.playedGames > 0) {
-          pythonInputData = {
-            is_simulation: false,
-            home: { played: homeStats.playedGames, goals_for: homeStats.goalsFor, goals_against: homeStats.goalsAgainst },
-            away: { played: awayStats.playedGames, goals_for: awayStats.goalsFor, goals_against: awayStats.goalsAgainst },
-            league_avg_home_goals: league_avg_home_goals,
-            league_avg_away_goals: league_avg_away_goals
-          };
+        league_avg_home_goals = (totalHomeGoals / totalMatches) || 1.45;
+        league_avg_away_goals = (totalAwayGoals / totalMatches) || 1.15;
+      }
+      
+      // 2. Form Verisi
+      if (homeFormRes.ok) {
+        const homeData = await homeFormRes.json();
+        home_form = homeData.matches.map((m: any) => ({ result: m.score.winner === 'HOME_TEAM' ? 'W' : m.score.winner === 'AWAY_TEAM' ? 'L' : 'D' }));
+      }
+       if (awayFormRes.ok) {
+        const awayData = await awayFormRes.json();
+        away_form = awayData.matches.map((m: any) => ({ result: m.score.winner === 'AWAY_TEAM' ? 'W' : m.score.winner === 'HOME_TEAM' ? 'L' : 'D' }));
+      }
+      
+      // 3. Oran Verisi
+      if(oddsRes.ok){
+        const oddsData = await oddsRes.json();
+        // İlgili maçı bul
+        const matchWithOdds = oddsData.matches.find((m: any) => m.homeTeam.id === homeId && m.awayTeam.id === awayId);
+        if (matchWithOdds && matchWithOdds.odds && matchWithOdds.odds.homeWin) {
+            odds = {
+                home: matchWithOdds.odds.homeWin,
+                draw: matchWithodds.odds.draw,
+                away: matchWithOdds.odds.awayWin
+            };
         }
       }
+
+      if (homeStats && awayStats && homeStats.playedGames > 0 && awayStats.playedGames > 0) {
+        pythonInputData = {
+          is_simulation: false,
+          home: { played: homeStats.playedGames, goals_for: homeStats.goalsFor, goals_against: homeStats.goalsAgainst },
+          away: { played: awayStats.playedGames, goals_for: awayStats.goalsFor, goals_against: awayStats.goalsAgainst },
+          league_avg_home_goals,
+          league_avg_away_goals,
+          home_form,
+          away_form,
+          odds,
+        };
+      }
+
     } catch (err) {
-      console.error("Veri Çekme Hatası:", err);
+      console.error("Hibrid Model için veri çekme hatası:", err);
+      // Hata durumunda bile temel analizle devam et
     }
 
-    // 2. PYTHON HESAPLAMASI (MATEMATİK)
+    // PYTHON HESAPLAMASI
     const pythonPromise = new Promise((resolve, reject) => {
       const pythonProcess = spawn('python3.11', ['analysis.py', JSON.stringify(pythonInputData)]);
       
@@ -148,12 +178,10 @@ export async function POST(request: Request) {
       try {
         predictionResult = JSON.parse(pythonOutput);
         if (predictionResult.error) {
-            // Python'un kendi döndürdüğü JSON hatası
             throw new Error(predictionResult.error);
         }
 
       } catch (parseError) {
-        // Eğer parse işlemi başarısız olursa, gelen ham çıktıyı hata olarak fırlat
         throw new Error(`JSON Parse Hatası. Gelen Veri: ${pythonOutput.substring(0, 200)}`);
       }
 
@@ -174,5 +202,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message || "Sunucu hatası" }, { status: 500 });
   }
 }
-
-    
