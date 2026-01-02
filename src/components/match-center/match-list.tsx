@@ -87,7 +87,7 @@ export function MatchList() {
       setData(formattedData);
       toast({ title: "Fikstür Güncellendi", description: `${formattedData.length} maç başarıyla çekildi.` });
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Veri Çekilemedi", description: error.message || "Lütfen internet bağlantınızı kontrol edin." });
+      toast({ variant: "destructive", title: "Fikstür Yenilenemedi", description: error.message || "Lütfen internet bağlantınızı kontrol edin." });
     } finally {
       setIsLoading(false);
     }
@@ -116,7 +116,6 @@ export function MatchList() {
         setPrediction(result);
     } catch (error: any) {
         toast({ variant: 'destructive', title: 'Tahmin Hatası', description: error.message });
-        setIsModalOpen(false);
     } finally {
         setIsPredicting(false);
     }
@@ -235,3 +234,5 @@ export function MatchList() {
     </div>
   );
 }
+
+    
