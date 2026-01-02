@@ -1,8 +1,9 @@
+
 'use client';
 
 import { useState } from "react";
 import { format } from "date-fns";
-import { RefreshCw, Calendar, Trophy, BrainCircuit, Bot, Zap, Percent, Target } from "lucide-react";
+import { RefreshCw, Calendar, Trophy, BrainCircuit, Bot, Zap, Percent, Target, BarChart2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { AlertTriangle } from "lucide-react";
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
 
 
 interface Match {
@@ -48,9 +50,31 @@ interface PredictionResult {
     away_win: number;
     score_prediction: string;
     confidence: number;
+    stats: {
+        home_xg: number;
+        away_xg: number;
+        home_attack?: number;
+        away_attack?: number;
+        home_defense?: number;
+        away_defense?: number;
+    }
   };
   aiInterpretation: string;
 }
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="p-2 bg-background border rounded-lg shadow-lg">
+        <p className="label font-bold">{`${label}`}</p>
+        <p className="text-primary">{`Ev Sahibi : ${payload[0].value}`}</p>
+        <p className="text-destructive">{`Deplasman : ${payload[1].value}`}</p>
+      </div>
+    );
+  }
+  return null;
+};
+
 
 export function MatchList() {
   const [data, setData] = useState<Match[]>([]);
@@ -124,10 +148,20 @@ export function MatchList() {
         setPrediction(result);
     } catch (error: any) {
         setPredictionError(error.message);
+        toast({
+            variant: "destructive",
+            title: "Tahmin Hatası",
+            description: error.message,
+        });
     } finally {
         setIsPredicting(false);
     }
   };
+
+  const strengthData = prediction?.mathAnalysis.stats.home_attack ? [
+    { name: 'Hücum Gücü', home: prediction.mathAnalysis.stats.home_attack, away: prediction.mathAnalysis.stats.away_attack },
+    { name: 'Savunma Gücü', home: prediction.mathAnalysis.stats.home_defense, away: prediction.mathAnalysis.stats.away_defense },
+  ] : [];
 
   return (
     <div className="space-y-4">
@@ -182,7 +216,7 @@ export function MatchList() {
       </div>
 
        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle className="text-xl font-headline">
               {selectedMatch ? `${selectedMatch.teams.home.name} vs ${selectedMatch.teams.away.name}` : 'Analiz'}
@@ -201,8 +235,7 @@ export function MatchList() {
                 </div>
                 <div>
                     <Skeleton className="h-6 w-3/4 mb-4" />
-                    <Skeleton className="h-4 w-full mb-2" />
-                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-24 w-full" />
                 </div>
              </div>
           ) : predictionError ? (
@@ -216,9 +249,8 @@ export function MatchList() {
                 </AlertDescription>
             </Alert>
           ) : prediction && (
-            <div className="grid md:grid-cols-2 gap-x-8 gap-y-6 py-4 text-sm">
-                {/* Matematiksel Analiz */}
-                <div className="space-y-4">
+            <div className="grid md:grid-cols-5 gap-x-8 gap-y-6 py-4 text-sm">
+                <div className="md:col-span-2 space-y-4">
                     <h3 className="font-semibold text-primary flex items-center gap-2"><BrainCircuit size={18}/> Matematiksel Analiz</h3>
                     <div className="flex justify-between items-center bg-muted p-3 rounded-lg">
                         <span className="font-medium text-muted-foreground flex items-center gap-2"><Percent size={16}/> Olasılıklar</span>
@@ -232,19 +264,33 @@ export function MatchList() {
                         <span className="font-medium text-muted-foreground flex items-center gap-2"><Target size={16}/> Tahmini Skor</span>
                         <span className="font-bold text-lg font-mono">{prediction.mathAnalysis.score_prediction}</span>
                     </div>
-                     <div className="flex justify-between items-center bg-card p-3 rounded-lg border">
+                     <div className="flex justify-between items-center border bg-card p-3 rounded-lg">
                         <span className="font-medium text-accent flex items-center gap-2"><Zap size={16}/> Güven Skoru</span>
                         <span className="font-bold text-lg text-accent">{prediction.mathAnalysis.confidence}%</span>
                     </div>
                 </div>
 
-                {/* AI Yorumu */}
-                <div className="space-y-3">
-                     <h3 className="font-semibold text-primary flex items-center gap-2"><Bot size={18}/> Kural Tabanlı Yorum</h3>
+                <div className="md:col-span-3 space-y-3">
+                     <h3 className="font-semibold text-primary flex items-center gap-2"><Bot size={18}/> Analiz Yorumu</h3>
                      <p className="text-muted-foreground leading-relaxed bg-muted/50 p-4 rounded-lg border">
                         {prediction.aiInterpretation}
                      </p>
                 </div>
+                
+                {strengthData && strengthData.length > 0 && (
+                  <div className="md:col-span-5">
+                    <h3 className="font-semibold text-primary flex items-center gap-2 mb-4"><BarChart2 size={18}/> Güç Karşılaştırması</h3>
+                    <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={strengthData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                            <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false}/>
+                            <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value.toFixed(1)}`}/>
+                            <Tooltip content={<CustomTooltip />} cursor={{fill: 'hsl(var(--muted))'}} />
+                            <Bar dataKey="home" fill="hsl(var(--primary))" name="Ev Sahibi" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="away" fill="hsl(var(--destructive))" name="Deplasman" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
             </div>
           )}
         </DialogContent>
@@ -252,3 +298,5 @@ export function MatchList() {
     </div>
   );
 }
+
+    

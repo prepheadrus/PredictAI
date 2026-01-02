@@ -1,3 +1,4 @@
+
 import sys
 import json
 import math
@@ -17,13 +18,13 @@ def get_team_strength(team_name):
     r = random.Random(seed)
     return r.uniform(0.8, 2.2)
 
-def fallback_analysis(ev_sahibi, deplasman, lig):
+def fallback_analysis(ev_sahibi, deplasman):
     """Fallback analysis if detailed stats are not provided."""
     home_strength = get_team_strength(ev_sahibi)
     away_strength = get_team_strength(deplasman)
     ev_beklenen_gol = 1.4 * home_strength / away_strength + 0.15
     dep_beklenen_gol = 1.2 * away_strength / home_strength
-    return analyze_match(ev_beklenen_gol, dep_beklenen_gol, "Poisson Distribution (Fallback)")
+    return analyze_match(ev_beklenen_gol, dep_beklenen_gol, "Poisson Distribution (Fallback)", {})
 
 def detailed_analysis(stats):
     """Analysis based on detailed team and league stats."""
@@ -42,10 +43,17 @@ def detailed_analysis(stats):
     ev_beklenen_gol = home_attack_strength * away_defense_strength * stats['league_avg_home_goals']
     dep_beklenen_gol = away_attack_strength * home_defense_strength * stats['league_avg_away_goals']
     
-    return analyze_match(ev_beklenen_gol, dep_beklenen_gol, "Poisson Distribution (Advanced Stats)")
+    strength_stats = {
+        "home_attack": round(home_attack_strength, 2),
+        "away_attack": round(away_attack_strength, 2),
+        "home_defense": round(home_defense_strength, 2),
+        "away_defense": round(away_defense_strength, 2)
+    }
+
+    return analyze_match(ev_beklenen_gol, dep_beklenen_gol, "Poisson Distribution (Advanced Stats)", strength_stats)
 
 
-def analyze_match(ev_beklenen_gol, dep_beklenen_gol, model_name):
+def analyze_match(ev_beklenen_gol, dep_beklenen_gol, model_name, strength_stats):
     """Core match analysis logic using Poisson distribution."""
     ev_gol_olasilik = [poisson_probability(i, ev_beklenen_gol) for i in range(7)]
     dep_gol_olasilik = [poisson_probability(i, dep_beklenen_gol) for i in range(7)]
@@ -75,7 +83,6 @@ def analyze_match(ev_beklenen_gol, dep_beklenen_gol, model_name):
         draw_prob /= total_prob
         away_win_prob /= total_prob
 
-    # Improved confidence calculation
     confidence = (max_prob + abs(home_win_prob - away_win_prob)) * 50
     confidence = min(99.0, max(10.0, confidence))
 
@@ -85,22 +92,27 @@ def analyze_match(ev_beklenen_gol, dep_beklenen_gol, model_name):
         "draw": round(draw_prob * 100, 1),
         "away_win": round(away_win_prob * 100, 1),
         "score_prediction": f"{most_likely_score[0]} - {most_likely_score[1]}",
-        "confidence": round(confidence, 1)
+        "confidence": round(confidence, 1),
+        "stats": {
+            "home_xg": round(ev_beklenen_gol, 2),
+            "away_xg": round(dep_beklenen_gol, 2),
+            **strength_stats
+        }
     }
     return json.dumps(sonuc)
 
 if __name__ == "__main__":
     try:
-        # Check if the first argument is a JSON string
         if len(sys.argv) == 2 and sys.argv[1].startswith('{'):
             stats = json.loads(sys.argv[1])
-            print(detailed_analysis(stats))
-        # Fallback to old method if JSON is not provided
-        elif len(sys.argv) == 4:
-            print(fallback_analysis(sys.argv[1], sys.argv[2], sys.argv[3]))
+            if stats.get("is_simulation", True):
+                print(fallback_analysis(stats.get("home_name", "Team A"), stats.get("away_name", "Team B")))
+            else:
+                print(detailed_analysis(stats))
         else:
-            # Fallback for when no arguments are provided, to avoid error
-            print(fallback_analysis("Team A", "Team B", "League"))
+            print(fallback_analysis("Team A", "Team B"))
             
     except Exception as e:
         print(json.dumps({"error": str(e)}))
+
+    

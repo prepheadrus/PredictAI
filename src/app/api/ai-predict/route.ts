@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import { spawn } from "child_process";
 
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
         // ID veya İsim ile Eşleştirme
         let homeStats = table.find((t: any) => t.team.id === homeId);
         let awayStats = table.find((t: any) => t.team.id === awayId);
-
+        
         // ID bulamazsa isme bak
         if (!homeStats) homeStats = table.find((t: any) => t.team.name.includes(homeTeam) || homeTeam.includes(t.team.name));
         if (!awayStats) awayStats = table.find((t: any) => t.team.name.includes(awayTeam) || awayTeam.includes(t.team.name));
@@ -173,3 +174,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message || "Sunucu hatası" }, { status: 500 });
   }
 }
+
+    
