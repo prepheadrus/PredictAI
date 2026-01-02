@@ -263,18 +263,18 @@ export function MatchList() {
                     <div className="flex justify-between items-center bg-muted p-3 rounded-lg">
                         <span className="font-medium text-muted-foreground flex items-center gap-2"><Percent size={16}/> Olasılıklar</span>
                         <div className="flex gap-4">
-                            <span className="font-mono" title="Ev Sahibi">{`1: ${selectedMatch!.home_win_prob!.toFixed(1)}%`}</span>
-                            <span className="font-mono" title="Beraberlik">{`X: ${selectedMatch!.draw_prob!.toFixed(1)}%`}</span>
-                            <span className="font-mono" title="Deplasman">{`2: ${selectedMatch!.away_win_prob!.toFixed(1)}%`}</span>
+                            <span className="font-mono" title="Ev Sahibi">{`1: ${(selectedMatch.home_win_prob ?? 0).toFixed(1)}%`}</span>
+                            <span className="font-mono" title="Beraberlik">{`X: ${(selectedMatch.draw_prob ?? 0).toFixed(1)}%`}</span>
+                            <span className="font-mono" title="Deplasman">{`2: ${(selectedMatch.away_win_prob ?? 0).toFixed(1)}%`}</span>
                         </div>
                     </div>
                      <div className="flex justify-between items-center bg-muted p-3 rounded-lg">
                         <span className="font-medium text-muted-foreground flex items-center gap-2"><Target size={16}/> Tahmini Skor</span>
-                        <span className="font-bold text-lg font-mono">{selectedMatch!.predicted_score}</span>
+                        <span className="font-bold text-lg font-mono">{selectedMatch.predicted_score}</span>
                     </div>
                      <div className="flex justify-between items-center border bg-card p-3 rounded-lg">
                         <span className="font-medium text-accent flex items-center gap-2"><Zap size={16}/> Güven Skoru</span>
-                        <span className="font-bold text-lg text-accent">{selectedMatch!.confidence!.toFixed(1)}%</span>
+                        <span className="font-bold text-lg text-accent">{(selectedMatch.confidence ?? 0).toFixed(1)}%</span>
                     </div>
                 </div>
 
