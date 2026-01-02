@@ -49,6 +49,14 @@ function runPythonAnalysis(home: string, away: string, league: string): Promise<
         reject(new Error('Failed to parse JSON from Python script.'));
       }
     });
+
+    pythonProcess.on('error', (err) => {
+      console.error('Failed to start Python process:', err);
+      if ((err as any).code === 'ENOENT') {
+        return reject(new Error(`Python executable not found at '${pythonExecutable}'. Please ensure Python is installed and the path is correct.`));
+      }
+      reject(err);
+    });
   });
 }
 
