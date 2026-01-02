@@ -1,7 +1,7 @@
 
 "use client";
 
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { ChartContainer, ChartTooltipContent } from '../ui/chart';
 import { Skeleton } from '../ui/skeleton';
@@ -45,7 +45,7 @@ export function HomeAdvantageChart({ data, isLoading }: HomeAdvantageChartProps)
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="h-48 w-full">
-            <BarChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 0 }}>
+            <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis 
                     dataKey="season"
@@ -56,18 +56,27 @@ export function HomeAdvantageChart({ data, isLoading }: HomeAdvantageChartProps)
                 />
                 <YAxis 
                     unit="%"
-                    domain={[30, 60]}
+                    domain={['dataMin - 2', 'dataMax + 2']}
                     tickLine={false}
                     axisLine={false}
                     tickMargin={8}
                     fontSize={12}
                 />
                  <Tooltip
-                    cursor={false}
+                    cursor={true}
                     content={<ChartTooltipContent indicator="dot" />}
                 />
-                <Bar dataKey="Home Win %" fill="var(--color-Home Win %)" radius={4} />
-            </BarChart>
+                <Line 
+                    dataKey="Home Win %" 
+                    stroke="var(--color-Home Win %)" 
+                    strokeWidth={2}
+                    dot={{
+                        r: 4,
+                        fill: "var(--color-Home Win %)",
+                        opacity: 1
+                    }}
+                />
+            </LineChart>
         </ChartContainer>
       </CardContent>
     </Card>
