@@ -1,9 +1,8 @@
-
 'use client';
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { format } from "date-fns";
-import { RefreshCw, Calendar, Trophy, BrainCircuit, Bot, Zap, Percent, Target, BarChart2 } from "lucide-react";
+import { RefreshCw, Calendar, Trophy, BrainCircuit, Bot, Zap, Percent, Target, BarChart2, ArrowDownUp, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +17,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { AlertTriangle } from "lucide-react";
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from "recharts";
+import { Progress } from "../ui/progress";
+import { cn } from "@/lib/utils";
 
 
 interface Match {
@@ -62,6 +63,10 @@ interface PredictionResult {
   aiInterpretation: string;
 }
 
+type AnalyzedMatch = Match & { analysis?: PredictionResult };
+type SortKey = "date" | "confidence";
+
+
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
@@ -77,33 +82,28 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 
 export function MatchList() {
-  const [data, setData] = useState<Match[]>([]);
+  const [data, setData] = useState<AnalyzedMatch[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isPredicting, setIsPredicting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
-  const [prediction, setPrediction] = useState<PredictionResult | null>(null);
+  const [selectedMatch, setSelectedMatch] = useState<AnalyzedMatch | null>(null);
   const [predictionError, setPredictionError] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("date");
   const { toast } = useToast();
 
   const handleRefresh = async () => {
+    setIsLoading(true);
+    setData([]);
     try {
-      setIsLoading(true);
-      
       const response = await fetch('/api/ingest');
       const result = await response.json();
 
-      if (!response.ok) {
-        throw new Error(result.error || `API Hatası: ${response.status}`);
-      }
-      
-      if (!result.matches || !Array.isArray(result.matches) || result.matches.length === 0) {
-        setData([]);
+      if (!response.ok) throw new Error(result.error || `API Hatası: ${response.status}`);
+      if (!result.matches || result.matches.length === 0) {
         toast({ title: "Bilgi", description: "Bu tarih aralığında seçili liglerde maç yok." });
         return;
       }
 
-      const formattedData = result.matches.map((match: any) => ({
+      const formattedData: Match[] = result.matches.map((match: any) => ({
         fixture: { id: match.id, date: match.utcDate, status: { short: match.status } },
         league: { id: match.competition?.id, name: match.competition?.name || "Lig", logo: match.competition?.emblem || null },
         teams: {
@@ -112,96 +112,122 @@ export function MatchList() {
         },
         goals: { home: match.score?.fullTime?.home ?? null, away: match.score?.fullTime?.away ?? null }
       }));
+      
+      toast({ title: "Fikstür Çekildi", description: `${formattedData.length} maç bulundu, analizler başlıyor...` });
+      
+      const analyzedMatches = await Promise.all(
+        formattedData.map(async (match) => {
+          try {
+            const predictionResponse = await fetch('/api/ai-predict', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  homeTeam: match.teams.home.name,
+                  awayTeam: match.teams.away.name,
+                  homeId: match.teams.home.id,
+                  awayId: match.teams.away.id,
+                  league: match.league.name,
+              }),
+            });
+            if (!predictionResponse.ok) return match; // Analiz başarısızsa sadece maç verisini tut
+            const analysis = await predictionResponse.json();
+            return { ...match, analysis };
+          } catch (e) {
+            return match; // Hata durumunda sadece maç verisini tut
+          }
+        })
+      );
 
-      setData(formattedData);
-      toast({ title: "Fikstür Güncellendi", description: `${formattedData.length} maç başarıyla çekildi.` });
+      setData(analyzedMatches);
+      toast({ title: "Analiz Tamamlandı", description: `${analyzedMatches.length} maç için tahminler hazır.` });
+
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Fikstür Yenilenemedi", description: error.message || "Lütfen internet bağlantınızı kontrol edin." });
+      toast({ variant: "destructive", title: "İşlem Başarısız", description: error.message });
     } finally {
       setIsLoading(false);
     }
   };
   
-  const handlePredict = async (match: Match) => {
-    setSelectedMatch(match);
-    setIsModalOpen(true);
-    setIsPredicting(true);
-    setPrediction(null);
-    setPredictionError(null);
-
-    try {
-        const response = await fetch('/api/ai-predict', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                homeTeam: match.teams.home.name,
-                awayTeam: match.teams.away.name,
-                homeId: match.teams.home.id,
-                awayId: match.teams.away.id,
-                league: match.league.name,
-            }),
-        });
-        const result = await response.json();
-        if (!response.ok) {
-            throw new Error(result.error || 'Tahmin alınamadı.');
-        }
-        setPrediction(result);
-    } catch (error: any) {
-        setPredictionError(error.message);
+  const handleCardClick = (match: AnalyzedMatch) => {
+    if (!match.analysis) {
         toast({
             variant: "destructive",
-            title: "Tahmin Hatası",
-            description: error.message,
+            title: "Analiz Verisi Eksik",
+            description: "Bu maç için tahmin verileri yüklenemedi. Lütfen yenileyip tekrar deneyin.",
         });
-    } finally {
-        setIsPredicting(false);
+        return;
     }
+    setSelectedMatch(match);
+    setIsModalOpen(true);
+    setPredictionError(null);
   };
 
-  const strengthData = prediction?.mathAnalysis.stats.home_attack ? [
-    { name: 'Hücum Gücü', home: prediction.mathAnalysis.stats.home_attack, away: prediction.mathAnalysis.stats.away_attack },
-    { name: 'Savunma Gücü', home: prediction.mathAnalysis.stats.home_defense, away: prediction.mathAnalysis.stats.away_defense },
+  const sortedData = useMemo(() => {
+    return [...data].sort((a, b) => {
+      if (sortKey === 'confidence') {
+        return (b.analysis?.mathAnalysis.confidence || 0) - (a.analysis?.mathAnalysis.confidence || 0);
+      }
+      // Default sort by date
+      return new Date(a.fixture.date).getTime() - new Date(b.fixture.date).getTime();
+    });
+  }, [data, sortKey]);
+
+  const strengthData = selectedMatch?.analysis?.mathAnalysis.stats.home_attack ? [
+    { name: 'Hücum Gücü', home: selectedMatch.analysis.mathAnalysis.stats.home_attack, away: selectedMatch.analysis.mathAnalysis.stats.away_attack },
+    { name: 'Savunma Gücü', home: selectedMatch.analysis.mathAnalysis.stats.home_defense, away: selectedMatch.analysis.mathAnalysis.stats.away_defense },
   ] : [];
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-bold flex items-center gap-2">
-          <Calendar className="w-5 h-5" />
-          Güncel Fikstür
-        </h2>
-        <Button onClick={handleRefresh} disabled={isLoading} variant="outline" size="sm">
-          <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-          {isLoading ? "Yenile" : "Yenile"}
-        </Button>
-      </div>
+      <Card>
+        <CardContent className="p-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-muted-foreground">Sırala:</p>
+                 <Button onClick={() => setSortKey('date')} variant={sortKey === 'date' ? 'default' : 'outline'} size="sm">
+                    <Clock className="w-4 h-4 mr-2" />
+                    Tarihe Göre
+                </Button>
+                <Button onClick={() => setSortKey('confidence')} variant={sortKey === 'confidence' ? 'default' : 'outline'} size="sm">
+                    <ArrowDownUp className="w-4 h-4 mr-2" />
+                    Güven Skoruna Göre
+                </Button>
+            </div>
+            <Button onClick={handleRefresh} disabled={isLoading} className="w-full sm:w-auto">
+              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+              {isLoading ? "Analiz Ediliyor..." : "Fikstürü Yenile ve Analiz Et"}
+            </Button>
+        </CardContent>
+      </Card>
+      
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {data.length === 0 ? (
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {isLoading ? (
+            [...Array(6)].map((_, i) => <Skeleton key={i} className="h-56 w-full" />)
+        ) : sortedData.length === 0 ? (
           <div className="col-span-full text-center py-10 border-2 border-dashed rounded-lg bg-muted/50">
-            <p className="text-muted-foreground font-medium">Henüz maç verisi yüklenmedi.</p>
-            <p className="text-xs text-muted-foreground mt-1">Yenile butonuna basarak verileri çekebilirsiniz.</p>
+            <p className="text-muted-foreground font-medium">Başlamak için fikstürü yenileyin.</p>
+            <p className="text-xs text-muted-foreground mt-1">Yukarıdaki butona basarak verileri çekebilirsiniz.</p>
           </div>
         ) : (
-          data.map((match) => (
-            <Card key={match.fixture.id} onClick={() => handlePredict(match)} className="hover:shadow-md transition-shadow cursor-pointer group">
-              <CardContent className="p-4">
-                <div className="flex justify-between items-start mb-4 pb-2 border-b">
+          sortedData.map((match) => (
+            <Card key={match.fixture.id} onClick={() => handleCardClick(match)} className={cn("hover:shadow-md transition-shadow cursor-pointer group flex flex-col", !match.analysis && "opacity-60 pointer-events-none")}>
+              <CardContent className="p-4 flex-grow flex flex-col">
+                <div className="flex justify-between items-start mb-2 pb-2 border-b">
                   <div className="flex items-center gap-2">
                     {match.league.logo && <img src={match.league.logo} alt="lig" className="w-5 h-5 object-contain"/>}
                     <Badge variant="secondary" className="text-[10px] font-normal px-1.5 h-5">{match.league.name}</Badge>
                   </div>
                   <span suppressHydrationWarning className="text-xs text-muted-foreground font-mono">
-                    {match.fixture.date ? format(new Date(match.fixture.date), "HH:mm") : '-'}
+                    {match.fixture.date ? format(new Date(match.fixture.date), "dd.MM HH:mm") : '-'}
                   </span>
                 </div>
-                <div className="flex justify-between items-center gap-2">
+                <div className="flex justify-between items-center gap-2 mb-4">
                   <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
                     {match.teams.home.logo ? <img src={match.teams.home.logo} alt={match.teams.home.name} className="w-10 h-10 object-contain group-hover:scale-110 transition-transform" /> : <Trophy className="w-8 h-8 text-gray-200" />}
                     <span className="text-xs font-bold text-center leading-tight line-clamp-2 w-full">{match.teams.home.name}</span>
                   </div>
-                  <div className="flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-md min-w-[70px]">
-                    <span className="text-lg font-black tracking-widest">{match.goals.home ?? "-"} : {match.goals.away ?? "-"}</span>
+                  <div className="flex flex-col items-center justify-center min-w-[70px]">
+                    <span className="text-lg font-black tracking-widest text-muted-foreground">{match.analysis?.mathAnalysis.score_prediction || "- : -"}</span>
                     <span className="text-[9px] text-muted-foreground mt-0.5 uppercase tracking-wider font-semibold">{match.fixture.status.short}</span>
                   </div>
                   <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
@@ -209,6 +235,31 @@ export function MatchList() {
                     <span className="text-xs font-bold text-center leading-tight line-clamp-2 w-full">{match.teams.away.name}</span>
                   </div>
                 </div>
+
+                <div className="mt-auto space-y-2">
+                    <div className="w-full">
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-medium flex items-center gap-1.5 text-accent"><Zap size={14}/> Güven Skoru</span>
+                            <span className="text-sm font-bold text-accent">{match.analysis?.mathAnalysis.confidence.toFixed(1)}%</span>
+                        </div>
+                        <Progress value={match.analysis?.mathAnalysis.confidence || 0} className="h-2 [&>div]:bg-accent" />
+                    </div>
+                     <div className="flex justify-around text-center text-xs text-muted-foreground pt-2">
+                        <div>
+                            <p className="font-bold text-sm text-primary">{match.analysis?.mathAnalysis.home_win || 0}%</p>
+                            <p>Ev Sahibi</p>
+                        </div>
+                        <div>
+                            <p className="font-bold text-sm">{match.analysis?.mathAnalysis.draw || 0}%</p>
+                            <p>Beraberlik</p>
+                        </div>
+                         <div>
+                            <p className="font-bold text-sm text-destructive">{match.analysis?.mathAnalysis.away_win || 0}%</p>
+                            <p>Deplasman</p>
+                        </div>
+                    </div>
+                </div>
+
               </CardContent>
             </Card>
           ))
@@ -225,55 +276,32 @@ export function MatchList() {
               Matematiksel model ve kural tabanlı yorumun birleşimi.
             </DialogDescription>
           </DialogHeader>
-          {isPredicting ? (
-             <div className="grid md:grid-cols-2 gap-6 py-4">
-                <div>
-                    <Skeleton className="h-6 w-3/4 mb-4" />
-                    <Skeleton className="h-4 w-full mb-2" />
-                    <Skeleton className="h-4 w-full mb-2" />
-                    <Skeleton className="h-4 w-5/6" />
-                </div>
-                <div>
-                    <Skeleton className="h-6 w-3/4 mb-4" />
-                    <Skeleton className="h-24 w-full" />
-                </div>
-             </div>
-          ) : predictionError ? (
-            <Alert variant="destructive" className="my-4">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Tahmin Hatası</AlertTitle>
-                <AlertDescription>
-                    <pre className="mt-2 w-full whitespace-pre-wrap rounded-md bg-slate-950 p-4 font-mono text-xs text-slate-50">
-                    {predictionError}
-                    </pre>
-                </AlertDescription>
-            </Alert>
-          ) : prediction && (
+          {selectedMatch?.analysis && (
             <div className="grid md:grid-cols-5 gap-x-8 gap-y-6 py-4 text-sm">
                 <div className="md:col-span-2 space-y-4">
                     <h3 className="font-semibold text-primary flex items-center gap-2"><BrainCircuit size={18}/> Matematiksel Analiz</h3>
                     <div className="flex justify-between items-center bg-muted p-3 rounded-lg">
                         <span className="font-medium text-muted-foreground flex items-center gap-2"><Percent size={16}/> Olasılıklar</span>
                         <div className="flex gap-4">
-                            <span className="font-mono" title="Ev Sahibi">{`1: ${prediction.mathAnalysis.home_win}%`}</span>
-                            <span className="font-mono" title="Beraberlik">{`X: ${prediction.mathAnalysis.draw}%`}</span>
-                            <span className="font-mono" title="Deplasman">{`2: ${prediction.mathAnalysis.away_win}%`}</span>
+                            <span className="font-mono" title="Ev Sahibi">{`1: ${selectedMatch.analysis.mathAnalysis.home_win}%`}</span>
+                            <span className="font-mono" title="Beraberlik">{`X: ${selectedMatch.analysis.mathAnalysis.draw}%`}</span>
+                            <span className="font-mono" title="Deplasman">{`2: ${selectedMatch.analysis.mathAnalysis.away_win}%`}</span>
                         </div>
                     </div>
                      <div className="flex justify-between items-center bg-muted p-3 rounded-lg">
                         <span className="font-medium text-muted-foreground flex items-center gap-2"><Target size={16}/> Tahmini Skor</span>
-                        <span className="font-bold text-lg font-mono">{prediction.mathAnalysis.score_prediction}</span>
+                        <span className="font-bold text-lg font-mono">{selectedMatch.analysis.mathAnalysis.score_prediction}</span>
                     </div>
                      <div className="flex justify-between items-center border bg-card p-3 rounded-lg">
                         <span className="font-medium text-accent flex items-center gap-2"><Zap size={16}/> Güven Skoru</span>
-                        <span className="font-bold text-lg text-accent">{prediction.mathAnalysis.confidence}%</span>
+                        <span className="font-bold text-lg text-accent">{selectedMatch.analysis.mathAnalysis.confidence}%</span>
                     </div>
                 </div>
 
                 <div className="md:col-span-3 space-y-3">
                      <h3 className="font-semibold text-primary flex items-center gap-2"><Bot size={18}/> Analiz Yorumu</h3>
                      <p className="text-muted-foreground leading-relaxed bg-muted/50 p-4 rounded-lg border">
-                        {prediction.aiInterpretation}
+                        {selectedMatch.analysis.aiInterpretation}
                      </p>
                 </div>
                 
@@ -298,5 +326,3 @@ export function MatchList() {
     </div>
   );
 }
-
-    
