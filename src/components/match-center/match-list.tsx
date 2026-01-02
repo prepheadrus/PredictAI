@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { format } from "date-fns";
-import { RefreshCw, Calendar, Trophy, BrainCircuit, Bot, Zap, Percent, Target, BarChart2, ArrowDownUp, Clock } from "lucide-react";
+import { RefreshCw, Calendar, Trophy, BrainCircuit, Bot, Zap, Percent, Target, BarChart2, ArrowDownUp, Clock, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ import { AlertTriangle } from "lucide-react";
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { Progress } from "../ui/progress";
 import { cn } from "@/lib/utils";
+import { TeamForm } from "../analysis/team-form";
 
 
 interface Match {
@@ -177,6 +178,11 @@ export function MatchList() {
     { name: 'Savunma Gücü', home: selectedMatch.analysis.mathAnalysis.stats.home_defense, away: selectedMatch.analysis.mathAnalysis.stats.away_defense },
   ] : [];
 
+  // Mock form data for now
+  const homeTeamForm = ['W', 'D', 'W', 'L', 'W'] as ('W' | 'D' | 'L')[];
+  const awayTeamForm = ['L', 'D', 'W', 'W', 'L'] as ('W' | 'D' | 'L')[];
+
+
   return (
     <div className="space-y-4">
       <Card>
@@ -306,9 +312,9 @@ export function MatchList() {
                 </div>
                 
                 {strengthData && strengthData.length > 0 && (
-                  <div className="md:col-span-5">
+                  <div className="md:col-span-3">
                     <h3 className="font-semibold text-primary flex items-center gap-2 mb-4"><BarChart2 size={18}/> Güç Karşılaştırması</h3>
-                    <ResponsiveContainer width="100%" height={200}>
+                    <ResponsiveContainer width="100%" height={150}>
                         <BarChart data={strengthData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                             <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false}/>
                             <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value.toFixed(1)}`}/>
@@ -319,6 +325,14 @@ export function MatchList() {
                     </ResponsiveContainer>
                   </div>
                 )}
+
+                <div className="md:col-span-2">
+                    <h3 className="font-semibold text-primary flex items-center gap-2 mb-4"><Flame size={18}/> Form Durumu</h3>
+                    <div className="space-y-4">
+                        <TeamForm form={homeTeamForm} teamName={selectedMatch.teams.home.name} />
+                        <TeamForm form={awayTeamForm} teamName={selectedMatch.teams.away.name} />
+                    </div>
+                </div>
             </div>
           )}
         </DialogContent>
