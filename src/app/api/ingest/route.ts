@@ -40,13 +40,13 @@ export async function GET(request: NextRequest) {
     const fixturesResponse = await apiFetch(`matches?dateFrom=${today}&dateTo=${endDate}&competitions=${competitions}`);
 
     if (!fixturesResponse || !fixturesResponse.matches || fixturesResponse.matches.length === 0) {
-      return NextResponse.json({ message: `No fixtures found for competitions ${competitions}.`, processed: 0 });
+      return NextResponse.json({ message: `No fixtures found for competitions ${competitions}.`, processed: 0, matches: [] });
     }
     
     // Fetch edilen veriyi veritabanına işle
     const processedCount = await mapAndUpsertFixtures(fixturesResponse);
 
-    return NextResponse.json({ message: 'Ingestion complete', processed: processedCount });
+    return NextResponse.json({ message: 'Ingestion complete', processed: processedCount, matches: fixturesResponse.matches });
 
   } catch (error: any) {
     console.error('Ingestion failed:', error);

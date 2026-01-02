@@ -67,8 +67,8 @@ export function MatchList() {
       if (!response.ok) {
         throw new Error(result.error || `API Hatası: ${response.status}`);
       }
-
-      if (!result.matches || !Array.isArray(result.matches)) {
+      
+      if (!result.matches || !Array.isArray(result.matches) || result.matches.length === 0) {
         setData([]);
         toast({ title: "Bilgi", description: "Bu tarih aralığında seçili liglerde maç yok." });
         return;
