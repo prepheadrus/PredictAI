@@ -43,6 +43,7 @@ export function MatchList() {
   const [isAnalyzing, setIsAnalyzing] = useState<Record<number, boolean>>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<MatchWithTeams | null>(null);
+  const [selectedMatchAnalysis, setSelectedMatchAnalysis] = useState<any | null>(null);
   const [sortKey, setSortKey] = useState<"date" | "confidence">("date");
   const { toast } = useToast();
   
@@ -78,12 +79,13 @@ export function MatchList() {
 
       toast({ title: "Fikstür Çekildi", description: `${ingestResult.processed} maç veritabanına işlendi. Analizler başlıyor.` });
       
-      await fetchAllMatches(); // Show the new matches immediately
+      const refreshedMatches = await getMatchesWithTeams();
+      setData(refreshedMatches);
 
-      // Sequentially analyze each match that needs it
-      const matchesToAnalyze = data.filter(m => m.confidence === null);
+      const matchesToAnalyze = refreshedMatches.filter(m => m.confidence === null);
       if(matchesToAnalyze.length === 0){
           toast({ title: "Her Şey Güncel", description: "Analiz bekleyen yeni maç bulunamadı." });
+          setIsLoading(false);
           return;
       }
       
@@ -99,7 +101,7 @@ export function MatchList() {
               if (!analysisResponse.ok) {
                   throw new Error(analysisResult.error || `Analysis failed for match ${match.id}`);
               }
-              // Update the specific match in the local state with the new analysis data
+              
               setData(prevData => prevData.map(m => m.id === match.id ? { ...m, ...analysisResult.updatedMatch } : m));
           } catch(e: any) {
               console.error(`Analysis failed for match ${match.id}:`, e.message);
@@ -130,6 +132,30 @@ export function MatchList() {
     setIsFormLoading(true);
     setHomeTeamForm(null);
     setAwayTeamForm(null);
+    setSelectedMatchAnalysis(null);
+
+    // Fetch full analysis for the modal
+    try {
+        const host = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:9002';
+        const response = await fetch(`${host}/api/ai-predict`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                homeTeam: match.homeTeam!.name,
+                awayTeam: match.awayTeam!.name,
+                homeId: match.homeTeam!.id,
+                awayId: match.awayTeam!.id,
+                league: "Unknown League",
+            }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+        setSelectedMatchAnalysis(result);
+
+    } catch (error) {
+         console.error("Failed to fetch full analysis", error);
+         toast({ variant: "destructive", title: "Hata", description: "Analiz yorumu çekilemedi."});
+    }
 
     try {
         const [homeFormRes, awayFormRes] = await Promise.all([
@@ -226,15 +252,15 @@ export function MatchList() {
                     </div>
                      <div className="flex justify-around text-center text-xs text-muted-foreground pt-2">
                         <div>
-                            <p className="font-bold text-sm text-primary">{match.home_win_prob?.toFixed(1) || '0'}%</p>
+                            <p className="font-bold text-sm text-primary">{(match.home_win_prob ?? 0).toFixed(1)}%</p>
                             <p>Ev Sahibi</p>
                         </div>
                         <div>
-                            <p className="font-bold text-sm">{match.draw_prob?.toFixed(1) || '0'}%</p>
+                            <p className="font-bold text-sm">{(match.draw_prob ?? 0).toFixed(1)}%</p>
                             <p>Beraberlik</p>
                         </div>
                          <div>
-                            <p className="font-bold text-sm text-destructive">{match.away_win_prob?.toFixed(1) || '0'}%</p>
+                            <p className="font-bold text-sm text-destructive">{(match.away_win_prob ?? 0).toFixed(1)}%</p>
                             <p>Deplasman</p>
                         </div>
                     </div>
@@ -280,34 +306,28 @@ export function MatchList() {
 
                 <div className="md:col-span-3 space-y-3">
                      <h3 className="font-semibold text-primary flex items-center gap-2"><Bot size={18}/> Analiz Yorumu</h3>
-                     <p className="text-muted-foreground leading-relaxed bg-muted/50 p-4 rounded-lg border">
-                        {/* AI Interpretation needs to be generated or fetched */}
-                        AI Yorumu...
-                     </p>
+                     <div className="text-muted-foreground leading-relaxed bg-muted/50 p-4 rounded-lg border min-h-[100px]">
+                        {selectedMatchAnalysis ? (
+                            <p>{selectedMatchAnalysis.aiInterpretation}</p>
+                        ): (
+                            <div className="space-y-2">
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-full" />
+                                <Skeleton className="h-4 w-3/4" />
+                            </div>
+                        )}
+                     </div>
                 </div>
                 
-                <div className="md:col-span-3">
-                    <h3 className="font-semibold text-primary flex items-center gap-2 mb-4"><BarChart2 size={18}/> Güç Karşılaştırması</h3>
-                    {/* <ResponsiveContainer width="100%" height={150}>
-                        <BarChart data={strengthData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                            <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false}/>
-                            <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value.toFixed(1)}`}/>
-                            <Tooltip content={<CustomTooltip />} cursor={{fill: 'hsl(var(--muted))'}} />
-                            <Bar dataKey="home" fill="hsl(var(--primary))" name="Ev Sahibi" radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="away" fill="hsl(var(--destructive))" name="Deplasman" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer> */}
-                  </div>
-
-                <div className="md:col-span-2">
-                    <h3 className="font-semibold text-primary flex items-center gap-2 mb-4"><Flame size={18}/> Form Durumu</h3>
+                <div className="md:col-span-5">
+                    <h3 className="font-semibold text-primary flex items-center gap-2 mb-2"><Flame size={18}/> Form Durumu</h3>
                      {isFormLoading ? (
                         <div className="space-y-4">
                             <Skeleton className="h-10 w-full" />
                             <Skeleton className="h-10 w-full" />
                         </div>
                     ) : (
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                             {homeTeamForm && <TeamForm form={homeTeamForm} teamName={selectedMatch!.homeTeam!.name!} />}
                             {awayTeamForm && <TeamForm form={awayTeamForm} teamName={selectedMatch!.awayTeam!.name!} />}
                         </div>
