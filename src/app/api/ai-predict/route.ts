@@ -45,7 +45,7 @@ async function getStandings(leagueCode: string) {
 
 function runPythonAnalysis(stats: string | null, home: string, away: string, league: string): Promise<PythonOutput> {
   return new Promise((resolve, reject) => {
-    const pythonExecutable = 'python3.11';
+    const pythonExecutable = process.env.PYTHON_PATH || 'python3.11';
     const scriptPath = path.join(process.cwd(), 'analysis.py');
     
     // Eğer stats varsa, bunu tek argüman olarak kullan. Yoksa, eski yöntemi kullan.
@@ -112,15 +112,16 @@ export async function POST(req: NextRequest) {
             const awayTeamStats = table.find((t: any) => t.team.id === awayTeamId);
 
             // Lig gol ortalamalarını hesapla
-            const totalMatches = table.length * (table.length - 1);
+            const totalMatches = table.length > 1 ? table.length * (table.length - 1) : 1;
             const totalGoals = table.reduce((sum: number, team: any) => sum + team.goalsFor, 0);
-            const avgGoalsPerGame = totalGoals / totalMatches;
+            const avgGoalsPerGame = totalMatches > 0 ? totalGoals / totalMatches : 1.35;
+
 
             // Genellikle ev sahibi takımlar biraz daha fazla gol atar.
             const league_avg_home_goals = avgGoalsPerGame + 0.15;
             const league_avg_away_goals = avgGoalsPerGame - 0.15 > 0 ? avgGoalsPerGame - 0.15 : avgGoalsPerGame;
             
-            if (homeTeamStats && awayTeamStats) {
+            if (homeTeamStats && awayTeamStats && homeTeamStats.playedGames > 0 && awayTeamStats.playedGames > 0) {
                  const statsObject = {
                     home: {
                         played: homeTeamStats.playedGames,
