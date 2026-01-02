@@ -1,187 +1,158 @@
-'use server';
-import { NextRequest, NextResponse } from 'next/server';
-import { spawn } from 'child_process';
-import path from 'path';
-import { ai } from '@/ai/genkit';
 
-interface PythonOutput {
-    math_model: string;
-    home_win: number;
-    draw: number;
-    away_win: number;
-    score_prediction: string;
-    confidence: number;
-    error?: string;
-}
+import { NextResponse } from "next/server";
+import { spawn } from "child_process";
 
-// Lig ID'sini lig koduna çeviren harita (API için gerekli)
-const leagueIdToCode: { [key: number]: string } = {
-    2021: "PL",  // Premier League
-    2014: "PD",  // La Liga
-    2002: "BL1", // Bundesliga
-    2015: "FL1", // Ligue 1
-    2019: "SA",  // Serie A
-    2001: "CL" // Champions League
+// Lig Kodları Haritası
+const LEAGUE_MAP: Record<string, string> = {
+  "Premier League": "PL",
+  "Primera Division": "PD",
+  "Bundesliga": "BL1",
+  "Serie A": "SA",
+  "Ligue 1": "FL1",
+  "Championship": "ELC",
+  "Primeira Liga": "PPL",
+  "Eredivisie": "DED",
+  "UEFA Champions League": "CL"
 };
 
+const FOOTBALL_API_KEY = "a938377027ec4af3bba0ae5a3ba19064";
 
-async function getStandings(leagueCode: string) {
-    const apiKey = process.env.FOOTBALL_DATA_API_KEY;
-    if (!apiKey) {
-        throw new Error('FOOTBALL_DATA_API_KEY is not defined in .env');
-    }
-    const response = await fetch(`https://api.football-data.org/v4/competitions/${leagueCode}/standings`, {
-        headers: { 'X-Auth-Token': apiKey },
-        cache: 'no-store'
-    });
-    if (!response.ok) {
-        const errorData = await response.json();
-        console.error(`Failed to fetch standings for ${leagueCode}:`, errorData.message);
-        return null;
-    }
-    return response.json();
+// --- KURAL TABANLI YORUMCU (YAPAY ZEKA YERİNE) ---
+function generateStaticComment(result: any, homeTeam: string, awayTeam: string) {
+  const hw = result.home_win;
+  const aw = result.away_win;
+  const draw = result.draw;
+  const score = result.score_prediction;
+  const homeXG = result.stats?.home_xg || 0;
+  const awayXG = result.stats?.away_xg || 0;
+
+  let comment = "";
+
+  // 1. KAZANMA OLASILIĞINA GÖRE YORUM
+  if (hw > 65) {
+    comment = `Veriler ${homeTeam} takımını mutlak favori gösteriyor (%${hw}). İstatistiksel olarak ev sahibinin ${score} gibi net bir skorla kazanması bekleniyor.`;
+  } else if (aw > 65) {
+    comment = `Deplasman ekibi ${awayTeam} ligdeki formuyla çok ağır basıyor (%${aw}). Ev sahibinin puan alması sürpriz olur. Beklenen sonuç: ${score}.`;
+  } else if (hw > 50) {
+    comment = `${homeTeam} saha ve seyirci avantajıyla bir adım önde (%${hw}). Ancak ${awayTeam} savunma disiplinini korursa zorluk çıkarabilir.`;
+  } else if (aw > 50) {
+    comment = `${awayTeam} deplasmanda olmasına rağmen galibiyete daha yakın duruyor (%${aw}). ${homeTeam} savunma açıklarını kapatmalı.`;
+  } else if (draw > 34 || Math.abs(hw - aw) < 10) {
+    comment = `Bu maç tam bir taktik savaşına sahne olacak. İki takımın güçleri birbirine çok denk (%${hw} - %${aw}). Beraberlik veya tek farklı bir sonuç muhtemel.`;
+  } else {
+    comment = `Oldukça dengeli ve her sonuca açık bir karşılaşma. İstatistikler ${hw > aw ? homeTeam : awayTeam} tarafını çok hafifçe işaret etse de riskli bir maç.`;
+  }
+
+  // 2. GOL BEKLENTİSİNE (xG) GÖRE EKLEME
+  const totalXG = homeXG + awayXG;
+  
+  if (totalXG > 3.2) {
+    comment += " Ayrıca veriler hücum gücü yüksek iki takımı işaret ediyor; bol gollü (2.5 Üst) bir maç izleyebiliriz.";
+  } else if (totalXG < 1.9) {
+    comment += " İki takımın da savunma kurgusu ön planda olabilir. Düşük tempolu ve az gollü (2.5 Alt) bir mücadele bekleniyor.";
+  } else if (awayXG > homeXG + 0.5) {
+    comment += ` ${awayTeam} takımının gol yollarındaki etkinliği dikkat çekici.`;
+  }
+
+  return comment;
 }
 
-function runPythonAnalysis(stats: string | null, home: string, away: string, league: string): Promise<PythonOutput> {
-  return new Promise((resolve, reject) => {
-    const pythonExecutable = process.env.PYTHON_PATH || 'python3.11';
-    const scriptPath = path.join(process.cwd(), 'analysis.py');
-    
-    const args = stats ? [scriptPath, stats] : [scriptPath, home, away, league];
-
-    const pythonProcess = spawn(pythonExecutable, args, { shell: true });
-
-    let stdout = '';
-    let stderr = '';
-
-    pythonProcess.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-
-    pythonProcess.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-
-    pythonProcess.on('close', (code) => {
-      if (code !== 0) {
-        console.error(`Python script stderr: ${stderr}`);
-        return reject(new Error(`Python script exited with code ${code}: ${stderr}`));
-      }
-      try {
-        const result: PythonOutput = JSON.parse(stdout);
-        if (result.error) {
-            return reject(new Error(result.error));
-        }
-        resolve(result);
-      } catch (e) {
-        console.error('Failed to parse Python script output:', stdout);
-        reject(new Error('Failed to parse JSON from Python script.'));
-      }
-    });
-
-    pythonProcess.on('error', (err) => {
-      console.error('Failed to start Python process:', err);
-      if ((err as any).code === 'ENOENT') {
-        return reject(new Error(`Python executable not found at '${pythonExecutable}'. Please ensure Python is installed and the path is correct. Current PATH: ${process.env.PATH}`));
-      }
-      reject(err);
-    });
-  });
-}
-
-// API Route Handler
-export async function POST(req: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const { homeTeam, awayTeam, leagueName, homeTeamId, awayTeamId, leagueId } = await req.json();
+    const body = await request.json();
+    const { homeTeam, awayTeam, league, homeId, awayId } = body;
 
-    if (!homeTeam || !awayTeam || !leagueName || !homeTeamId || !awayTeamId || !leagueId) {
-      return NextResponse.json({ error: 'Missing team or league information' }, { status: 400 });
-    }
+    console.log(`🧮 ANALİZ (NO-AI): ${homeTeam} vs ${awayTeam}`);
 
-    let statsForPython: string | null = null;
-    const leagueCode = leagueIdToCode[leagueId];
+    const leagueCode = LEAGUE_MAP[league] || "PL";
+    let pythonInputData = { is_simulation: true, home_name: homeTeam, away_name: awayTeam };
 
-    if (leagueCode) {
-        const standingsData = await getStandings(leagueCode);
-        if (standingsData && standingsData.standings && standingsData.standings[0]?.table) {
-            const table = standingsData.standings[0].table;
-            
-            const homeStats = table.find((t: any) => t.team.id === homeTeamId);
-            const awayStats = table.find((t: any) => t.team.id === awayTeamId);
-            
-            if (homeStats && awayStats && homeStats.playedGames > 0 && awayStats.playedGames > 0) {
-                let totalHomeGoals = 0;
-                let totalAwayGoals = 0;
-                let totalMatches = 0;
+    // 1. GERÇEK VERİYİ ÇEK (Puan Durumu)
+    try {
+      const standingsUrl = `https://api.football-data.org/v4/competitions/${leagueCode}/standings`;
+      const standingsRes = await fetch(standingsUrl, {
+        headers: { "X-Auth-Token": FOOTBALL_API_KEY },
+        next: { revalidate: 3600 }
+      });
 
-                table.forEach((team: any) => {
-                    totalHomeGoals += team.goalsFor;
-                    totalAwayGoals += team.goalsAgainst; // Simple approximation
-                    totalMatches += team.playedGames;
-                });
-                
-                const avgMatches = totalMatches / table.length;
-                const league_avg_home_goals = (totalHomeGoals / totalMatches) || 1.45;
-                const league_avg_away_goals = (totalAwayGoals / totalMatches) || 1.15;
+      if (standingsRes.ok) {
+        const standingsData = await standingsRes.json();
+        const table = standingsData.standings?.[0]?.table || [];
 
-                 const statsObject = {
-                    home: {
-                        played: homeStats.playedGames,
-                        goals_for: homeStats.goalsFor,
-                        goals_against: homeStats.goalsAgainst
-                    },
-                    away: {
-                        played: awayStats.playedGames,
-                        goals_for: awayStats.goalsFor,
-                        goals_against: awayStats.goalsAgainst
-                    },
-                    league_avg_home_goals: league_avg_home_goals,
-                    league_avg_away_goals: league_avg_away_goals
-                 };
-                 statsForPython = JSON.stringify(statsObject);
-            } else {
-                 console.log(`Could not find one or both teams in standings. Home ID: ${homeTeamId}, Away ID: ${awayTeamId}`);
-                 const tableIds = table.map((t:any) => t.team.id);
-                 console.log(`Available IDs in table: ${tableIds.join(', ')}`);
-                 statsForPython = JSON.stringify({ is_simulation: true, home_name: homeTeam, away_name: awayTeam });
-            }
+        // ID veya İsim ile Eşleştirme
+        let homeStats = table.find((t: any) => t.team.id === homeId);
+        let awayStats = table.find((t: any) => t.team.id === awayId);
+
+        // ID bulamazsa isme bak
+        if (!homeStats) homeStats = table.find((t: any) => t.team.name.includes(homeTeam) || homeTeam.includes(t.team.name));
+        if (!awayStats) awayStats = table.find((t: any) => t.team.name.includes(awayTeam) || awayTeam.includes(t.team.name));
+        
+        let totalHomeGoals = 0;
+        let totalAwayGoals = 0;
+        let totalMatches = 0;
+
+        table.forEach((team: any) => {
+            totalHomeGoals += team.goalsFor; // Bu aslında toplam gol, sadece bir ortalama için kullanılıyor
+            totalAwayGoals += team.goalsAgainst; 
+            totalMatches += team.playedGames;
+        });
+
+        const numTeams = table.length > 0 ? table.length : 1;
+        const avgMatchesPerTeam = totalMatches / numTeams;
+        
+        const league_avg_home_goals = (totalHomeGoals / totalMatches) || 1.45;
+        const league_avg_away_goals = (totalAwayGoals / totalMatches) || 1.15;
+
+
+        if (homeStats && awayStats && homeStats.played > 0 && awayStats.played > 0) {
+          pythonInputData = {
+            is_simulation: false,
+            home: { played: homeStats.playedGames, goals_for: homeStats.goalsFor, goals_against: homeStats.goalsAgainst },
+            away: { played: awayStats.playedGames, goals_for: awayStats.goalsFor, goals_against: awayStats.goalsAgainst },
+            league_avg_home_goals: league_avg_home_goals,
+            league_avg_away_goals: league_avg_away_goals
+          };
         }
+      }
+    } catch (err) {
+      console.error("Veri Çekme Hatası:", err);
     }
 
+    // 2. PYTHON HESAPLAMASI (MATEMATİK)
+    const pythonProcess = spawn('python3.11', ['analysis.py', JSON.stringify(pythonInputData)]);
 
-    const mathResult = await runPythonAnalysis(statsForPython, homeTeam, awayTeam, leagueName);
+    let pythonDataString = "";
+    for await (const chunk of pythonProcess.stdout) {
+      pythonDataString += chunk;
+    }
+     let errorString = "";
+    for await (const chunk of pythonProcess.stderr) {
+      errorString += chunk;
+    }
 
-    const promptText = `
-      Bir uzman futbol analisti olarak aşağıdaki matematiksel verileri yorumla. 
-      Yorumun kısa, net ve bahis odaklı olsun. Sadece maçı yorumla, olasılıkları tekrar etme.
+    let predictionResult;
+    try {
+      predictionResult = JSON.parse(pythonDataString);
+       if (predictionResult.error || errorString) {
+         console.error("Python Error:", errorString || predictionResult.error);
+         throw new Error(errorString || predictionResult.error);
+       }
+    } catch (e) {
+      console.error("Hesaplama veya Parse Hatası:", e);
+      return NextResponse.json({ error: "Hesaplama Hatası" }, { status: 500 });
+    }
 
-      Matematiksel Analiz:
-      - Model: ${mathResult.math_model}
-      - ${homeTeam} Kazanma Olasılığı: %${mathResult.home_win}
-      - Beraberlik Olasılığı: %${mathResult.draw}
-      - ${awayTeam} Kazanma Olasılığı: %${mathResult.away_win}
-      - Tahmini Skor: ${mathResult.score_prediction}
+    // 3. STATİK YORUM ÜRETME
+    const staticComment = generateStaticComment(predictionResult, homeTeam, awayTeam);
 
-      Lütfen bu verilere dayanarak kısa bir maç yorumu yap.
-    `;
-
-    const { text } = await ai.generate({
-      model: 'googleai/gemini-pro',
-      prompt: promptText,
-    });
-    
-    const aiInterpretation = text;
-
+    // Frontend yapısını bozmamak için 'gemini_comment' anahtarı ile gönderiyoruz
     return NextResponse.json({
-      mathAnalysis: mathResult,
-      aiInterpretation: aiInterpretation,
+      mathAnalysis: predictionResult,
+      aiInterpretation: staticComment 
     });
 
   } catch (error: any) {
-    console.error('[AI-PREDICT API ERROR]', error);
-    return NextResponse.json(
-      { error: error.message || 'An unexpected error occurred.' },
-      { status: 500 }
-    );
+    console.error("Sunucu Hatası:", error);
+    return NextResponse.json({ error: error.message || "Sunucu hatası" }, { status: 500 });
   }
 }
