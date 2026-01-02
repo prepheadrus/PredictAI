@@ -12,7 +12,8 @@ const LEAGUE_MAP: Record<string, string> = {
   "Championship": "ELC",
   "Primeira Liga": "PPL",
   "Eredivisie": "DED",
-  "UEFA Champions League": "CL"
+  "UEFA Champions League": "CL",
+  "Brasileiro Série A": "BSA"
 };
 
 const FOOTBALL_API_KEY = "a938377027ec4af3bba0ae5a3ba19064";
@@ -99,7 +100,7 @@ export async function POST(request: Request) {
       ]);
       
       let homeStats, awayStats, league_avg_home_goals, league_avg_away_goals;
-      let home_form:any[] = [], away_form:any[] = [];
+      let home_form_raw:any[] = [], away_form_raw:any[] = [];
       let odds = {};
       let injuries = { home: 0, away: 0 };
 
@@ -113,20 +114,26 @@ export async function POST(request: Request) {
         
         let totalHomeGoals = 0, totalAwayGoals = 0, totalMatches = 0;
         table.forEach((team: any) => {
-            totalHomeGoals += team.goalsFor;
-            totalAwayGoals += team.goalsAgainst; 
+            // Note: This logic for league average is simplified.
+            // A more accurate way would be to sum all goals scored by home teams and away teams separately.
+            totalHomeGoals += team.goalsFor; // This is total goals, not just home goals
+            totalAwayGoals += team.goalsAgainst; // This is total goals against, not just away goals
             totalMatches += team.playedGames;
         });
+        
+        const totalGamesInLeague = (table.length * (table.length-1)); // Approximation
+        const avgGoalsPerGame = (totalHomeGoals + totalAwayGoals) / totalGamesInLeague if table.length > 1 else 2.5;
 
-        league_avg_home_goals = (totalHomeGoals / totalMatches) || 1.45;
-        league_avg_away_goals = (totalAwayGoals / totalMatches) || 1.15;
+
+        league_avg_home_goals = (standingsData.competition.code === 'BSA' || totalHomeGoals === 0) ? 1.45 : (totalHomeGoals / totalMatches);
+        league_avg_away_goals = (standingsData.competition.code === 'BSA' || totalAwayGoals === 0) ? 1.15 : (totalAwayGoals / totalMatches);
       }
       
       // 2. Form Verisi
       if (homeFormRes.ok) {
         const homeData = await homeFormRes.json();
         const teamId = homeId;
-        home_form = homeData.matches.map((m: any) => {
+        home_form_raw = homeData.matches.map((m: any) => {
             let result: "W" | "D" | "L";
             const homeScore = m.score.fullTime.home;
             const awayScore = m.score.fullTime.away;
@@ -145,7 +152,7 @@ export async function POST(request: Request) {
        if (awayFormRes.ok) {
         const awayData = await awayFormRes.json();
         const teamId = awayId;
-        away_form = awayData.matches.map((m: any) => {
+        away_form_raw = awayData.matches.map((m: any) => {
             let result: "W" | "D" | "L";
             const homeScore = m.score.fullTime.home;
             const awayScore = m.score.fullTime.away;
@@ -166,11 +173,11 @@ export async function POST(request: Request) {
       if(oddsRes.ok){
         const oddsData = await oddsRes.json();
         const matchWithOdds = oddsData.matches.find((m: any) => m.homeTeam.id === homeId && m.awayTeam.id === awayId);
-        if (matchWithOdds && matchWithOdds.odds && matchWithOdds.odds.homeWin) {
+        if (matchWithOdds && matchWithOdds.odds && (matchWithOdds.odds.homeWin || matchWithOdds.odds.home)) {
             odds = {
-                home: matchWithOdds.odds.homeWin,
+                home: matchWithOdds.odds.homeWin || matchWithOdds.odds.home,
                 draw: matchWithOdds.odds.draw,
-                away: matchWithOdds.odds.awayWin
+                away: matchWithOdds.odds.awayWin || matchWithOdds.odds.away
             };
         }
       }
@@ -192,8 +199,8 @@ export async function POST(request: Request) {
           away: { played: awayStats.playedGames, goals_for: awayStats.goalsFor, goals_against: awayStats.goalsAgainst },
           league_avg_home_goals,
           league_avg_away_goals,
-          home_form,
-          away_form,
+          home_form_raw,
+          away_form_raw,
           odds,
           injuries,
         };
