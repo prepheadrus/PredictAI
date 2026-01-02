@@ -23,6 +23,7 @@ interface Match {
     status: { short: string };
   };
   league: {
+    id: number;
     name: string;
     logo: string | null;
   };
@@ -76,7 +77,7 @@ export function MatchList() {
 
       const formattedData = result.matches.map((match: any) => ({
         fixture: { id: match.id, date: match.utcDate, status: { short: match.status } },
-        league: { name: match.competition?.name || "Lig", logo: match.competition?.emblem || null },
+        league: { id: match.competition?.id, name: match.competition?.name || "Lig", logo: match.competition?.emblem || null },
         teams: {
           home: { id: match.homeTeam?.id, name: match.homeTeam?.name || "Ev Sahibi", logo: match.homeTeam?.crest || null },
           away: { id: match.awayTeam?.id, name: match.awayTeam?.name || "Deplasman", logo: match.awayTeam?.crest || null }
@@ -105,7 +106,10 @@ export function MatchList() {
             body: JSON.stringify({
                 homeTeam: match.teams.home.name,
                 awayTeam: match.teams.away.name,
-                league: match.league.name,
+                leagueName: match.league.name,
+                homeTeamId: match.teams.home.id,
+                awayTeamId: match.teams.away.id,
+                leagueId: match.league.id,
             }),
         });
         if (!response.ok) {
@@ -234,5 +238,3 @@ export function MatchList() {
     </div>
   );
 }
-
-    
