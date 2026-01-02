@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { mapAndUpsertFixtures } from '@/lib/api-football';
 
 const API_URL = 'https://api.football-data.org/v4';
 
@@ -12,7 +13,7 @@ const apiFetch = async (endpoint: string) => {
     headers: {
       'X-Auth-Token': apiKey,
     },
-    cache: 'no-store' // Ensure fresh data on every request
+    cache: 'no-store'
   });
 
   const data = await response.json();
@@ -39,10 +40,13 @@ export async function GET(request: NextRequest) {
     const fixturesResponse = await apiFetch(`matches?dateFrom=${today}&dateTo=${endDate}&competitions=${competitions}`);
 
     if (!fixturesResponse || !fixturesResponse.matches || fixturesResponse.matches.length === 0) {
-      return NextResponse.json({ message: `No fixtures found for competitions ${competitions}.`, matches: [] });
+      return NextResponse.json({ message: `No fixtures found for competitions ${competitions}.`, processed: 0 });
     }
+    
+    // Fetch edilen veriyi veritabanına işle
+    const processedCount = await mapAndUpsertFixtures(fixturesResponse);
 
-    return NextResponse.json({ message: 'Fetch complete', matches: fixturesResponse.matches });
+    return NextResponse.json({ message: 'Ingestion complete', processed: processedCount });
 
   } catch (error: any) {
     console.error('Ingestion failed:', error);

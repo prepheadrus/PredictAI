@@ -35,7 +35,7 @@ export function SyncManager() {
       setStatus("success");
       toast({
         title: "Ingestion Successful",
-        description: `${result.processed} matches have been processed from API-Football.`,
+        description: `${result.processed} matches have been processed and saved to the database.`,
       });
 
     } catch (error: any) {
@@ -92,7 +92,7 @@ export function SyncManager() {
           <CheckCircle className="h-4 w-4" />
           <AlertTitle>Ingestion Complete</AlertTitle>
           <AlertDescription>
-            Successfully processed {processedCount} matches at {new Date().toLocaleTimeString()}.
+            Successfully processed and saved {processedCount} matches at {new Date().toLocaleTimeString()}.
           </AlertDescription>
         </Alert>
       )}

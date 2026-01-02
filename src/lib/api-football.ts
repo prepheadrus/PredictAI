@@ -68,16 +68,30 @@ async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueId: number):
 
 export async function mapAndUpsertFixtures(fixturesResponse: any) {
     const { matches, competition } = fixturesResponse;
-    if (!competition || !competition.area) {
-        throw new Error("Competition data or area is missing from the API response.");
+
+    // Check if competition and area data exist
+    if (!competition || !competition.area || !competition.area.name) {
+      // If not, we might be dealing with a response with matches from multiple competitions
+      // In this case, we'll process each match's competition individually.
+      let count = 0;
+      for (const match of matches) {
+          if (!match.competition?.id || !match.competition?.name || !match.competition?.area?.name) {
+              console.warn(`Skipping match ${match.id} due to missing competition data.`);
+              continue;
+          }
+          await processMatch(match, match.competition);
+          count++;
+      }
+      return count;
     }
     
+    // If it's a single competition response, process as before
     // Upsert League
     await db.insert(schema.leagues)
         .values({
             id: competition.id,
             name: competition.name,
-            country: competition.area.name, // Correctly access nested property
+            country: competition.area.name,
         })
         .onConflictDoUpdate({
             target: schema.leagues.id,
@@ -86,56 +100,73 @@ export async function mapAndUpsertFixtures(fixturesResponse: any) {
 
     let count = 0;
     for (const match of matches) {
-        // Skip if team data is incomplete
-        if (!match.homeTeam?.id || !match.awayTeam?.id || !match.homeTeam?.name || !match.awayTeam?.name) {
-            console.warn(`Skipping match ${match.id} due to missing team data.`);
-            continue;
-        }
-
-        const { homeTeamId, awayTeamId } = await getTeamIds(match.homeTeam, match.awayTeam, competition.id);
-        
-        let status;
-        switch (match.status) {
-            case 'FINISHED':
-                status = 'FT';
-                break;
-            case 'SCHEDULED':
-            case 'TIMED':
-                status = 'NS';
-                break;
-            case 'IN_PLAY':
-                status = 'LIVE';
-                break;
-             case 'PAUSED':
-                status = 'HT';
-                break;
-            default:
-                status = match.status; // Keep original status if not mappable
-        }
-
-        const matchData = {
-            api_fixture_id: match.id,
-            home_team_id: homeTeamId,
-            away_team_id: awayTeamId,
-            match_date: new Date(match.utcDate),
-            home_score: match.score.fullTime.home,
-            away_score: match.score.fullTime.away,
-            status: status,
-        };
-
-        await db.insert(schema.matches)
-            .values(matchData)
-            .onConflictDoUpdate({
-                target: schema.matches.api_fixture_id,
-                set: {
-                    home_score: matchData.home_score,
-                    away_score: matchData.away_score,
-                    status: matchData.status,
-                    match_date: matchData.match_date,
-                }
-            });
+        await processMatch(match, competition);
         count++;
     }
 
     return count;
+}
+
+async function processMatch(match: any, competition: any) {
+    // Skip if team data is incomplete
+    if (!match.homeTeam?.id || !match.awayTeam?.id || !match.homeTeam?.name || !match.awayTeam?.name) {
+        console.warn(`Skipping match ${match.id} due to missing team data.`);
+        return;
+    }
+
+    // Upsert the league for this specific match just in case
+    await db.insert(schema.leagues)
+      .values({
+          id: competition.id,
+          name: competition.name,
+          country: competition.area.name,
+      })
+      .onConflictDoNothing();
+
+
+    const { homeTeamId, awayTeamId } = await getTeamIds(match.homeTeam, match.awayTeam, competition.id);
+    
+    let status;
+    switch (match.status) {
+        case 'FINISHED':
+            status = 'FT';
+            break;
+        case 'SCHEDULED':
+        case 'TIMED':
+            status = 'NS';
+            break;
+        case 'IN_PLAY':
+            status = 'LIVE';
+            break;
+         case 'PAUSED':
+            status = 'HT';
+            break;
+        case 'POSTPONED':
+            status = 'PST';
+            break;
+        default:
+            status = match.status;
+    }
+
+    const matchData = {
+        api_fixture_id: match.id,
+        home_team_id: homeTeamId,
+        away_team_id: awayTeamId,
+        match_date: new Date(match.utcDate),
+        home_score: match.score.fullTime.home,
+        away_score: match.score.fullTime.away,
+        status: status,
+    };
+
+    await db.insert(schema.matches)
+        .values(matchData)
+        .onConflictDoUpdate({
+            target: schema.matches.api_fixture_id,
+            set: {
+                home_score: matchData.home_score,
+                away_score: matchData.away_score,
+                status: matchData.status,
+                match_date: matchData.match_date,
+            }
+        });
 }
