@@ -20,7 +20,7 @@ import { AlertTriangle } from "lucide-react";
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { Progress } from "../ui/progress";
 import { cn } from "@/lib/utils";
-import { TeamForm } from "../analysis/team-form";
+import { TeamForm, type FormResult } from "../analysis/team-form";
 
 
 interface Match {
@@ -178,9 +178,21 @@ export function MatchList() {
     { name: 'Savunma Gücü', home: selectedMatch.analysis.mathAnalysis.stats.home_defense, away: selectedMatch.analysis.mathAnalysis.stats.away_defense },
   ] : [];
 
-  // Mock form data for now
-  const homeTeamForm = ['W', 'D', 'W', 'L', 'W'] as ('W' | 'D' | 'L')[];
-  const awayTeamForm = ['L', 'D', 'W', 'W', 'L'] as ('W' | 'D' | 'L')[];
+  // Mock form data with details
+  const homeTeamForm: FormResult[] = [
+      { result: 'W', opponentName: 'OGC Nice', score: '2-1' },
+      { result: 'D', opponentName: 'PSG', score: '1-1' },
+      { result: 'W', opponentName: 'FC Lorient', score: '3-0' },
+      { result: 'L', opponentName: 'AS Monaco', score: '1-2' },
+      { result: 'W', opponentName: 'Stade Rennais', score: '1-0' },
+  ];
+  const awayTeamForm: FormResult[] = [
+      { result: 'L', opponentName: 'LOSC Lille', score: '0-1' },
+      { result: 'D', opponentName: 'Olympique Lyonnais', score: '2-2' },
+      { result: 'W', opponentName: 'Stade de Reims', score: '2-0' },
+      { result: 'W', opponentName: 'FC Nantes', score: '3-1' },
+      { result: 'L', opponentName: 'RC Strasbourg', score: '1-2' },
+  ];
 
 
   return (

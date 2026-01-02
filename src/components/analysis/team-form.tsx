@@ -1,8 +1,20 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+export interface FormResult {
+  result: "W" | "D" | "L";
+  opponentName: string;
+  score: string;
+}
 
 interface TeamFormProps {
-  form: ("W" | "D" | "L")[];
+  form: FormResult[];
   teamName: string;
 }
 
@@ -16,19 +28,27 @@ export function TeamForm({ form, teamName }: TeamFormProps) {
   return (
     <div>
       <h3 className="font-semibold mb-2">{teamName} Form (Last 5)</h3>
-      <div className="flex gap-2">
-        {form.map((result, index) => (
-          <Badge
-            key={index}
-            className={cn(
-              "w-8 h-8 flex items-center justify-center text-white font-bold text-sm",
-              formVariant[result]
-            )}
-          >
-            {result}
-          </Badge>
-        ))}
-      </div>
+      <TooltipProvider>
+        <div className="flex gap-2">
+          {form.map((game, index) => (
+            <Tooltip key={index}>
+              <TooltipTrigger asChild>
+                <Badge
+                  className={cn(
+                    "w-8 h-8 flex items-center justify-center text-white font-bold text-sm cursor-help",
+                    formVariant[game.result]
+                  )}
+                >
+                  {game.result}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>vs. {game.opponentName} ({game.score})</p>
+              </TooltipContent>
+            </Tooltip>
+          ))}
+        </div>
+      </TooltipProvider>
     </div>
   );
 }
