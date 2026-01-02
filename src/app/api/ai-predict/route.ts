@@ -125,11 +125,41 @@ export async function POST(request: Request) {
       // 2. Form Verisi
       if (homeFormRes.ok) {
         const homeData = await homeFormRes.json();
-        home_form = homeData.matches.map((m: any) => ({ result: m.score.winner === 'HOME_TEAM' ? 'W' : m.score.winner === 'AWAY_TEAM' ? 'L' : 'D' }));
+        const teamId = homeId;
+        home_form = homeData.matches.map((m: any) => {
+            let result: "W" | "D" | "L";
+            const homeScore = m.score.fullTime.home;
+            const awayScore = m.score.fullTime.away;
+            const isHomeTeam = m.homeTeam.id.toString() === teamId.toString();
+
+            if (homeScore === awayScore) {
+                result = "D";
+            } else if ((isHomeTeam && homeScore > awayScore) || (!isHomeTeam && awayScore > homeScore)) {
+                result = "W";
+            } else {
+                result = "L";
+            }
+            return { result };
+        });
       }
        if (awayFormRes.ok) {
         const awayData = await awayFormRes.json();
-        away_form = awayData.matches.map((m: any) => ({ result: m.score.winner === 'AWAY_TEAM' ? 'W' : m.score.winner === 'HOME_TEAM' ? 'L' : 'D' }));
+        const teamId = awayId;
+        away_form = awayData.matches.map((m: any) => {
+            let result: "W" | "D" | "L";
+            const homeScore = m.score.fullTime.home;
+            const awayScore = m.score.fullTime.away;
+            const isHomeTeam = m.homeTeam.id.toString() === teamId.toString();
+
+            if (homeScore === awayScore) {
+                result = "D";
+            } else if ((isHomeTeam && homeScore > awayScore) || (!isHomeTeam && awayScore > homeScore)) {
+                result = "W";
+            } else {
+                result = "L";
+            }
+            return { result };
+        });
       }
       
       // 3. Oran Verisi
@@ -227,3 +257,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message || "Sunucu hatası" }, { status: 500 });
   }
 }
+
+    
