@@ -17,7 +17,8 @@ interface PythonOutput {
 // Python scriptini çalıştıran fonksiyon
 function runPythonAnalysis(home: string, away: string, league: string): Promise<PythonOutput> {
   return new Promise((resolve, reject) => {
-    const pythonExecutable = process.env.PYTHON_PATH || 'python';
+    // Python path'i esnek hale getirildi. Project IDX gibi ortamlarda sistemin PATH'inden bulacak.
+    const pythonExecutable = process.env.PYTHON_PATH || 'python3';
     const scriptPath = path.join(process.cwd(), 'analysis.py');
 
     const pythonProcess = spawn(pythonExecutable, [scriptPath, home, away, league]);
@@ -52,8 +53,9 @@ function runPythonAnalysis(home: string, away: string, league: string): Promise<
 
     pythonProcess.on('error', (err) => {
       console.error('Failed to start Python process:', err);
+      // Hata durumunda daha fazla bilgi logla
       if ((err as any).code === 'ENOENT') {
-        return reject(new Error(`Python executable not found at '${pythonExecutable}'. Please ensure Python is installed and the path is correct.`));
+        return reject(new Error(`Python executable not found at '${pythonExecutable}'. Please ensure Python is installed and the path is correct. Current PATH: ${process.env.PATH}`));
       }
       reject(err);
     });
