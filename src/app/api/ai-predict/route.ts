@@ -17,8 +17,8 @@ interface PythonOutput {
 // Python scriptini çalıştıran fonksiyon
 function runPythonAnalysis(home: string, away: string, league: string): Promise<PythonOutput> {
   return new Promise((resolve, reject) => {
-    // Python path'i esnek hale getirildi. Project IDX gibi ortamlarda sistemin PATH'inden bulacak.
-    const pythonExecutable = process.env.PYTHON_PATH || 'python3';
+    // Python yolunu esnek hale getiriyoruz. Project IDX gibi ortamlarda sistemin PATH'inden bulacak.
+    const pythonExecutable = 'python3';
     const scriptPath = path.join(process.cwd(), 'analysis.py');
 
     const pythonProcess = spawn(pythonExecutable, [scriptPath, home, away, league]);
