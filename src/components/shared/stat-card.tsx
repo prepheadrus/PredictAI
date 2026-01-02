@@ -27,16 +27,8 @@ export function StatCard({
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{value}</div>
-        {change && (
-          <p
-            className={cn(
-              "text-xs text-muted-foreground",
-              changeType === "positive" && "text-green-600",
-              changeType === "negative" && "text-red-600"
-            )}
-          >
-            {change} {description}
-          </p>
+        {description && (
+           <p className="text-xs text-muted-foreground">{description}</p>
         )}
       </CardContent>
     </Card>
