@@ -7,6 +7,8 @@
   packages = [
     pkgs.nodejs_20
     pkgs.zulu
+    pkgs.python311  # <-- Spesifik sürüm
+    pkgs.python311Packages.pip # <-- Paket yöneticisi
   ];
   # Sets environment variables in the workspace
   env = {};

@@ -17,10 +17,12 @@ interface PythonOutput {
 // Python scriptini çalıştıran fonksiyon
 function runPythonAnalysis(home: string, away: string, league: string): Promise<PythonOutput> {
   return new Promise((resolve, reject) => {
-    // Python yolunu esnek hale getiriyoruz. Project IDX gibi ortamlarda sistemin PATH'inden bulacak.
+    // Proje ortamıyla uyumlu olması için 'python3' kullanılıyor.
     const pythonExecutable = 'python3';
     const scriptPath = path.join(process.cwd(), 'analysis.py');
 
+    // 'shell: true' seçeneği, komutun bir kabuk içinde çalışmasını sağlar.
+    // Bu, PATH gibi ortam değişkenlerinin doğru şekilde miras alınmasına yardımcı olur.
     const pythonProcess = spawn(pythonExecutable, [scriptPath, home, away, league], { shell: true });
 
     let stdout = '';
@@ -91,7 +93,7 @@ export async function POST(req: NextRequest) {
 
     // 3. Gemini'den yorumsal analizi al
     const { text } = await ai.generate({
-      model: 'googleai/gemini-pro',
+      model: 'googleai/gemini-2.5-flash',
       prompt: promptText,
     });
     
