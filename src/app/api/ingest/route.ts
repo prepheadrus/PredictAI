@@ -32,9 +32,9 @@ export async function GET(request: NextRequest) {
     const today = new Date().toISOString().split('T')[0];
     const endDate = new Date(new Date().setDate(new Date().getDate() + 3)).toISOString().split('T')[0];
 
-    // KULLANICININ HESABINDA AKTİF OLAN LİGLER
-    // PL: İngiltere, PD: İspanya, SA: İtalya, BL1: Almanya, FL1: Fransa, CL: Şampiyonlar Ligi, DED: Hollanda, PPL: Portekiz
-    const competitions = "PL,PD,SA,BL1,FL1,CL,DED,PPL";
+    // KULLANICININ HESABINDA AKTİF OLAN TÜM LİGLER
+    // PL, PD, SA, BL1, FL1, CL, DED, PPL, ELC, BSA
+    const competitions = "PL,PD,SA,BL1,FL1,CL,DED,PPL,ELC,BSA";
       
     console.log(`Fetching fixtures from ${today} to ${endDate} for competitions: ${competitions}`);
     const fixturesResponse = await apiFetch(`matches?dateFrom=${today}&dateTo=${endDate}&competitions=${competitions}`);

@@ -64,12 +64,16 @@ export default function LeagueStatusPage() {
             <SelectValue placeholder="Select a league" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="PL">Premier League (England)</SelectItem>
-            <SelectItem value="PD">La Liga (Spain)</SelectItem>
-            <SelectItem value="BL1">Bundesliga (Germany)</SelectItem>
-            <SelectItem value="SA">Serie A (Italy)</SelectItem>
-            <SelectItem value="FL1">Ligue 1 (France)</SelectItem>
+            <SelectItem value="PL">Premier League (İngiltere)</SelectItem>
+            <SelectItem value="PD">La Liga (İspanya)</SelectItem>
+            <SelectItem value="BL1">Bundesliga (Almanya)</SelectItem>
+            <SelectItem value="SA">Serie A (İtalya)</SelectItem>
+            <SelectItem value="FL1">Ligue 1 (Fransa)</SelectItem>
             <SelectItem value="CL">Champions League</SelectItem>
+            <SelectItem value="DED">Eredivisie (Hollanda)</SelectItem>
+            <SelectItem value="PPL">Primeira Liga (Portekiz)</SelectItem>
+            <SelectItem value="ELC">Championship (İngiltere)</SelectItem>
+            <SelectItem value="BSA">Brasileirão (Brezilya)</SelectItem>
           </SelectContent>
         </Select>
       </div>
