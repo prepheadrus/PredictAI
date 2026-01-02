@@ -17,7 +17,7 @@ interface PythonOutput {
 // Python scriptini çalıştıran fonksiyon
 function runPythonAnalysis(home: string, away: string, league: string): Promise<PythonOutput> {
   return new Promise((resolve, reject) => {
-    const pythonExecutable = process.env.PYTHON_PATH || 'python3';
+    const pythonExecutable = process.env.PYTHON_PATH || 'python';
     const scriptPath = path.join(process.cwd(), 'analysis.py');
 
     const pythonProcess = spawn(pythonExecutable, [scriptPath, home, away, league]);
