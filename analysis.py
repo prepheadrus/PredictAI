@@ -66,11 +66,15 @@ def detailed_analysis(stats):
             odds_probs['away_win'] = (1/odds['away']) / total_implied
 
     # --- 4. Form Model ---
-    home_form = stats.get('home_form', [])
-    away_form = stats.get('away_form', [])
+    home_form_raw = stats.get('home_form', [])
+    away_form_raw = stats.get('away_form', [])
+    # Extract the 'result' string from the list of dicts
+    home_form = [item['result'] for item in home_form_raw if 'result' in item]
+    away_form = [item['result'] for item in away_form_raw if 'result' in item]
+    
     form_points = {'W': 3, 'D': 1, 'L': 0}
-    home_form_score = sum(form_points.get(r['result'], 0) for r in home_form)
-    away_form_score = sum(form_points.get(r['result'], 0) for r in away_form)
+    home_form_score = sum(form_points.get(r, 0) for r in home_form)
+    away_form_score = sum(form_points.get(r, 0) for r in away_form)
     
     form_probs = {'home_win': 0.33, 'draw': 0.33, 'away_win': 0.33}
     total_form_score = home_form_score + away_form_score
@@ -199,3 +203,5 @@ if __name__ == "__main__":
     except Exception as e:
         import traceback
         print(json.dumps({"error": str(e), "trace": traceback.format_exc()}))
+
+    
