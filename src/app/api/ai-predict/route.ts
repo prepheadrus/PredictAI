@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import path from 'path';
 import { ai } from '@/ai/genkit';
-import { leagues } from '@/lib/mock-data'; // Lig kodunu bulmak için
 
 interface PythonOutput {
     math_model: string;
@@ -167,7 +166,7 @@ export async function POST(req: NextRequest) {
     `;
 
     const { text } = await ai.generate({
-      model: 'googleai/gemini-2.5-flash',
+      model: 'googleai/gemini-pro',
       prompt: promptText,
     });
     
