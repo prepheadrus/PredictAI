@@ -106,9 +106,9 @@ export function MatchList() {
             body: JSON.stringify({
                 homeTeam: match.teams.home.name,
                 awayTeam: match.teams.away.name,
-                leagueName: match.league.name,
                 homeTeamId: match.teams.home.id,
                 awayTeamId: match.teams.away.id,
+                leagueName: match.league.name,
                 leagueId: match.league.id,
             }),
         });
@@ -120,6 +120,7 @@ export function MatchList() {
         setPrediction(result);
     } catch (error: any) {
         toast({ variant: 'destructive', title: 'Tahmin Hatası', description: error.message });
+        // Don't close modal on error so user can see something went wrong
     } finally {
         setIsPredicting(false);
     }

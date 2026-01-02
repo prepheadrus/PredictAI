@@ -17,11 +17,11 @@ interface PythonOutput {
 
 // Lig ID'sini lig koduna çeviren harita (API için gerekli)
 const leagueIdToCode: { [key: number]: string } = {
-    1: "PL",  // Premier League
-    2: "PD",  // La Liga
-    3: "BL1", // Bundesliga
-    4: "FL1", // Ligue 1
-    5: "SA",  // Serie A
+    2021: "PL",  // Premier League
+    2014: "PD",  // La Liga
+    2002: "BL1", // Bundesliga
+    2015: "FL1", // Ligue 1
+    2019: "SA",  // Serie A
     2001: "CL" // Champions League
 };
 
@@ -48,7 +48,6 @@ function runPythonAnalysis(stats: string | null, home: string, away: string, lea
     const pythonExecutable = process.env.PYTHON_PATH || 'python3.11';
     const scriptPath = path.join(process.cwd(), 'analysis.py');
     
-    // Eğer stats varsa, bunu tek argüman olarak kullan. Yoksa, eski yöntemi kullan.
     const args = stats ? [scriptPath, stats] : [scriptPath, home, away, league];
 
     const pythonProcess = spawn(pythonExecutable, args, { shell: true });
@@ -96,7 +95,7 @@ export async function POST(req: NextRequest) {
   try {
     const { homeTeam, awayTeam, leagueName, homeTeamId, awayTeamId, leagueId } = await req.json();
 
-    if (!homeTeam || !awayTeam || !leagueName) {
+    if (!homeTeam || !awayTeam || !leagueName || !homeTeamId || !awayTeamId || !leagueId) {
       return NextResponse.json({ error: 'Missing team or league information' }, { status: 400 });
     }
 
@@ -108,54 +107,51 @@ export async function POST(req: NextRequest) {
         if (standingsData && standingsData.standings && standingsData.standings[0]?.table) {
             const table = standingsData.standings[0].table;
             
-            const homeTeamStats = table.find((t: any) => t.team.id === homeTeamId);
-            const awayTeamStats = table.find((t: any) => t.team.id === awayTeamId);
+            const homeStats = table.find((t: any) => t.team.id === homeTeamId);
+            const awayStats = table.find((t: any) => t.team.id === awayTeamId);
             
-            if (homeTeamStats && awayTeamStats && homeTeamStats.playedGames > 0 && awayTeamStats.playedGames > 0) {
-                 // Calculate league average goals more dynamically
+            if (homeStats && awayStats && homeStats.playedGames > 0 && awayStats.playedGames > 0) {
                 let totalHomeGoals = 0;
                 let totalAwayGoals = 0;
                 let totalMatches = 0;
 
                 table.forEach((team: any) => {
-                    // This is an approximation. A more accurate method would be to get all match results.
-                    // For now, we assume goals for/against are split evenly between home/away which is not true
-                    // but better than a fixed value.
-                    totalHomeGoals += team.goalsFor / 2;
-                    totalAwayGoals += team.goalsFor / 2;
+                    totalHomeGoals += team.goalsFor;
+                    totalAwayGoals += team.goalsAgainst; // Simple approximation
                     totalMatches += team.playedGames;
                 });
                 
-                const avgMatchesPerTeam = totalMatches / table.length;
-                
-                // Avoid division by zero
-                const league_avg_home_goals = (totalHomeGoals / (totalMatches/2)) || 1.45;
-                const league_avg_away_goals = (totalAwayGoals / (totalMatches/2)) || 1.15;
+                const avgMatches = totalMatches / table.length;
+                const league_avg_home_goals = (totalHomeGoals / totalMatches) || 1.45;
+                const league_avg_away_goals = (totalAwayGoals / totalMatches) || 1.15;
 
                  const statsObject = {
                     home: {
-                        played: homeTeamStats.playedGames,
-                        goals_for: homeTeamStats.goalsFor,
-                        goals_against: homeTeamStats.goalsAgainst
+                        played: homeStats.playedGames,
+                        goals_for: homeStats.goalsFor,
+                        goals_against: homeStats.goalsAgainst
                     },
                     away: {
-                        played: awayTeamStats.playedGames,
-                        goals_for: awayTeamStats.goalsFor,
-                        goals_against: awayTeamStats.goalsAgainst
+                        played: awayStats.playedGames,
+                        goals_for: awayStats.goalsFor,
+                        goals_against: awayStats.goalsAgainst
                     },
                     league_avg_home_goals: league_avg_home_goals,
                     league_avg_away_goals: league_avg_away_goals
                  };
                  statsForPython = JSON.stringify(statsObject);
+            } else {
+                 console.log(`Could not find one or both teams in standings. Home ID: ${homeTeamId}, Away ID: ${awayTeamId}`);
+                 const tableIds = table.map((t:any) => t.team.id);
+                 console.log(`Available IDs in table: ${tableIds.join(', ')}`);
+                 statsForPython = JSON.stringify({ is_simulation: true, home_name: homeTeam, away_name: awayTeam });
             }
         }
     }
 
 
-    // 1. Python'dan matematiksel analizi al
     const mathResult = await runPythonAnalysis(statsForPython, homeTeam, awayTeam, leagueName);
 
-    // 2. Gemini için prompt oluştur
     const promptText = `
       Bir uzman futbol analisti olarak aşağıdaki matematiksel verileri yorumla. 
       Yorumun kısa, net ve bahis odaklı olsun. Sadece maçı yorumla, olasılıkları tekrar etme.
@@ -170,7 +166,6 @@ export async function POST(req: NextRequest) {
       Lütfen bu verilere dayanarak kısa bir maç yorumu yap.
     `;
 
-    // 3. Gemini'den yorumsal analizi al
     const { text } = await ai.generate({
       model: 'googleai/gemini-2.5-flash',
       prompt: promptText,
@@ -178,7 +173,6 @@ export async function POST(req: NextRequest) {
     
     const aiInterpretation = text;
 
-    // 4. İki sonucu birleştirip frontend'e gönder
     return NextResponse.json({
       mathAnalysis: mathResult,
       aiInterpretation: aiInterpretation,
