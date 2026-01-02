@@ -69,6 +69,7 @@ export function MatchList() {
 
 
   const handleRefreshAndAnalyze = async () => {
+    setIsAnalyzing({});
     setIsLoading(true);
     toast({ title: "Fikstür Yenileniyor...", description: "Yeni maçlar için API kontrol ediliyor." });
 
@@ -79,6 +80,7 @@ export function MatchList() {
 
       toast({ title: "Fikstür Çekildi", description: `${ingestResult.processed} maç veritabanına işlendi. Analizler başlıyor.` });
       
+      // Re-fetch matches to get a fresh list including newly ingested ones
       const refreshedMatches = await getMatchesWithTeams();
       setData(refreshedMatches);
 
@@ -86,35 +88,43 @@ export function MatchList() {
       if(matchesToAnalyze.length === 0){
           toast({ title: "Her Şey Güncel", description: "Analiz bekleyen yeni maç bulunamadı." });
           setIsLoading(false);
+          await fetchAllMatches(); // Still refresh the list
           return;
       }
       
-      for(const match of matchesToAnalyze) {
-          setIsAnalyzing(prev => ({ ...prev, [match.id]: true }));
-          try {
-              const analysisResponse = await fetch('/api/run-analysis', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ matchId: match.id }),
-              });
-              const analysisResult = await analysisResponse.json();
-              if (!analysisResponse.ok) {
-                  throw new Error(analysisResult.error || `Analysis failed for match ${match.id}`);
+      let analysisPromises = matchesToAnalyze.map(match => {
+          return (async () => {
+              setIsAnalyzing(prev => ({ ...prev, [match.id]: true }));
+              try {
+                  const analysisResponse = await fetch('/api/run-analysis', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ matchId: match.id }),
+                  });
+                  const analysisResult = await analysisResponse.json();
+                  if (!analysisResponse.ok) {
+                      throw new Error(analysisResult.error || `Analysis failed for match ${match.id}`);
+                  }
+                  // Update the specific match in our local state
+                  setData(prevData => prevData.map(m => m.id === match.id ? { ...m, ...analysisResult.updatedMatch } : m));
+              } catch(e: any) {
+                  console.error(`Analysis failed for match ${match.id}:`, e.message);
+                   setData(prevData => prevData.map(m => m.id === match.id ? { ...m, confidence: 0 } : m));
+              } finally {
+                  setIsAnalyzing(prev => ({ ...prev, [match.id]: false }));
               }
-              
-              setData(prevData => prevData.map(m => m.id === match.id ? { ...m, ...analysisResult.updatedMatch } : m));
-          } catch(e: any) {
-              console.error(`Analysis failed for match ${match.id}:`, e.message);
-          } finally {
-              setIsAnalyzing(prev => ({ ...prev, [match.id]: false }));
-          }
-      }
+          })();
+      });
+
+      await Promise.all(analysisPromises);
+      
       toast({ title: "Analiz Tamamlandı!", description: `${matchesToAnalyze.length} maçın analizi tamamlandı ve kaydedildi.` });
       
     } catch (error: any) {
       toast({ variant: "destructive", title: "İşlem Başarısız", description: error.message });
     } finally {
       setIsLoading(false);
+      await fetchAllMatches();
     }
   };
   
@@ -340,3 +350,5 @@ export function MatchList() {
     </div>
   );
 }
+
+    
