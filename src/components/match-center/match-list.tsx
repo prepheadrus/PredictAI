@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { format } from "date-fns";
-import { RefreshCw, Calendar, Trophy, BrainCircuit, Bot, Zap, Percent, Target, BarChart2, ArrowDownUp, Clock, Flame } from "lucide-react";
+import { RefreshCw, Calendar, Trophy, BrainCircuit, Bot, Zap, Percent, Target, BarChart2, ArrowDownUp, Clock, Flame, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,57 +15,12 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-import { AlertTriangle } from "lucide-react";
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from "recharts";
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
 import { Progress } from "../ui/progress";
 import { cn } from "@/lib/utils";
 import { TeamForm, type FormResult } from "../analysis/team-form";
-
-
-interface Match {
-  fixture: {
-    id: number;
-    date: string;
-    status: { short: string };
-  };
-  league: {
-    id: number;
-    name: string;
-    logo: string | null;
-  };
-  teams: {
-    home: { id: number; name: string; logo: string | null };
-    away: { id: number; name: string; logo: string | null };
-  };
-  goals: {
-    home: number | null;
-    away: number | null;
-  };
-}
-
-interface PredictionResult {
-  mathAnalysis: {
-    math_model: string;
-    home_win: number;
-    draw: number;
-    away_win: number;
-    score_prediction: string;
-    confidence: number;
-    stats: {
-        home_xg: number;
-        away_xg: number;
-        home_attack?: number;
-        away_attack?: number;
-        home_defense?: number;
-        away_defense?: number;
-    }
-  };
-  aiInterpretation: string;
-}
-
-type AnalyzedMatch = Match & { analysis?: PredictionResult };
-type SortKey = "date" | "confidence";
+import { getMatchesWithTeams } from "@/app/actions";
+import type { MatchWithTeams } from "@/lib/types";
 
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -83,69 +38,77 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 
 export function MatchList() {
-  const [data, setData] = useState<AnalyzedMatch[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [data, setData] = useState<MatchWithTeams[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAnalyzing, setIsAnalyzing] = useState<Record<number, boolean>>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedMatch, setSelectedMatch] = useState<AnalyzedMatch | null>(null);
-  const [predictionError, setPredictionError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [selectedMatch, setSelectedMatch] = useState<MatchWithTeams | null>(null);
+  const [sortKey, setSortKey] = useState<"date" | "confidence">("date");
   const { toast } = useToast();
   
   const [homeTeamForm, setHomeTeamForm] = useState<FormResult[] | null>(null);
   const [awayTeamForm, setAwayTeamForm] = useState<FormResult[] | null>(null);
   const [isFormLoading, setIsFormLoading] = useState(false);
 
-  const handleRefresh = async () => {
-    setIsLoading(true);
-    setData([]);
-    try {
-      const response = await fetch('/api/ingest');
-      const result = await response.json();
-
-      if (!response.ok) throw new Error(result.error || `API Hatası: ${response.status}`);
-      if (!result.matches || result.matches.length === 0) {
-        toast({ title: "Bilgi", description: "Bu tarih aralığında seçili liglerde maç yok." });
-        return;
+  const fetchAllMatches = useCallback(async () => {
+      setIsLoading(true);
+      try {
+          const matches = await getMatchesWithTeams();
+          setData(matches);
+      } catch (error: any) {
+          toast({ variant: "destructive", title: "Hata", description: `Maçlar çekilemedi: ${error.message}` });
+      } finally {
+          setIsLoading(false);
       }
+  }, [toast]);
 
-      const formattedData: Match[] = result.matches.map((match: any) => ({
-        fixture: { id: match.id, date: match.utcDate, status: { short: match.status } },
-        league: { id: match.competition?.id, name: match.competition?.name || "Lig", logo: match.competition?.emblem || null },
-        teams: {
-          home: { id: match.homeTeam?.id, name: match.homeTeam?.name || "Ev Sahibi", logo: match.homeTeam?.crest || null },
-          away: { id: match.awayTeam?.id, name: match.awayTeam?.name || "Deplasman", logo: match.awayTeam?.crest || null }
-        },
-        goals: { home: match.score?.fullTime?.home ?? null, away: match.score?.fullTime?.away ?? null }
-      }));
+  useEffect(() => {
+      fetchAllMatches();
+  }, [fetchAllMatches]);
+
+
+  const handleRefreshAndAnalyze = async () => {
+    setIsLoading(true);
+    toast({ title: "Fikstür Yenileniyor...", description: "Yeni maçlar için API kontrol ediliyor." });
+
+    try {
+      const ingestResponse = await fetch('/api/ingest');
+      const ingestResult = await ingestResponse.json();
+      if (!ingestResponse.ok) throw new Error(ingestResult.error || 'Fikstür çekme başarısız.');
+
+      toast({ title: "Fikstür Çekildi", description: `${ingestResult.processed} maç veritabanına işlendi. Analizler başlıyor.` });
       
-      toast({ title: "Fikstür Çekildi", description: `${formattedData.length} maç bulundu, analizler başlıyor...` });
+      await fetchAllMatches(); // Show the new matches immediately
+
+      // Sequentially analyze each match that needs it
+      const matchesToAnalyze = data.filter(m => m.confidence === null);
+      if(matchesToAnalyze.length === 0){
+          toast({ title: "Her Şey Güncel", description: "Analiz bekleyen yeni maç bulunamadı." });
+          return;
+      }
       
-      const analyzedMatches = await Promise.all(
-        formattedData.map(async (match) => {
+      for(const match of matchesToAnalyze) {
+          setIsAnalyzing(prev => ({ ...prev, [match.id]: true }));
           try {
-            const predictionResponse = await fetch('/api/ai-predict', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  homeTeam: match.teams.home.name,
-                  awayTeam: match.teams.away.name,
-                  homeId: match.teams.home.id,
-                  awayId: match.teams.away.id,
-                  league: match.league.name,
-              }),
-            });
-            if (!predictionResponse.ok) return match; // Analiz başarısızsa sadece maç verisini tut
-            const analysis = await predictionResponse.json();
-            return { ...match, analysis };
-          } catch (e) {
-            return match; // Hata durumunda sadece maç verisini tut
+              const analysisResponse = await fetch('/api/run-analysis', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ matchId: match.id }),
+              });
+              const analysisResult = await analysisResponse.json();
+              if (!analysisResponse.ok) {
+                  throw new Error(analysisResult.error || `Analysis failed for match ${match.id}`);
+              }
+              // Update the specific match in the local state with the new analysis data
+              setData(prevData => prevData.map(m => m.id === match.id ? { ...m, ...analysisResult.updatedMatch } : m));
+          } catch(e: any) {
+              console.error(`Analysis failed for match ${match.id}:`, e.message);
+          } finally {
+              setIsAnalyzing(prev => ({ ...prev, [match.id]: false }));
           }
-        })
-      );
-
-      setData(analyzedMatches);
-      toast({ title: "Analiz Tamamlandı", description: `${analyzedMatches.length} maç için tahminler hazır.` });
-
+      }
+      toast({ title: "Analiz Tamamlandı!", description: `${matchesToAnalyze.length} maçın analizi tamamlandı ve kaydedildi.` });
+      
     } catch (error: any) {
       toast({ variant: "destructive", title: "İşlem Başarısız", description: error.message });
     } finally {
@@ -153,36 +116,30 @@ export function MatchList() {
     }
   };
   
-  const handleCardClick = async (match: AnalyzedMatch) => {
-    if (!match.analysis) {
+  const handleCardClick = async (match: MatchWithTeams) => {
+    if (match.confidence === null) {
         toast({
             variant: "destructive",
             title: "Analiz Verisi Eksik",
-            description: "Bu maç için tahmin verileri yüklenemedi. Lütfen yenileyip tekrar deneyin.",
+            description: "Bu maç henüz analiz edilmemiş. Lütfen önce analiz işlemini çalıştırın.",
         });
         return;
     }
     setSelectedMatch(match);
     setIsModalOpen(true);
-    setPredictionError(null);
     setIsFormLoading(true);
     setHomeTeamForm(null);
     setAwayTeamForm(null);
 
     try {
         const [homeFormRes, awayFormRes] = await Promise.all([
-            fetch(`/api/team-form?teamId=${match.teams.home.id}`),
-            fetch(`/api/team-form?teamId=${match.teams.away.id}`)
+            fetch(`/api/team-form?teamId=${match.home_team_id}`),
+            fetch(`/api/team-form?teamId=${match.away_team_id}`)
         ]);
 
-        if (homeFormRes.ok) {
-            const homeData = await homeFormRes.json();
-            setHomeTeamForm(homeData);
-        }
-         if (awayFormRes.ok) {
-            const awayData = await awayFormRes.json();
-            setAwayTeamForm(awayData);
-        }
+        if (homeFormRes.ok) setHomeTeamForm(await homeFormRes.json());
+        if (awayFormRes.ok) setAwayTeamForm(await awayFormRes.json());
+
     } catch (error) {
         console.error("Failed to fetch team forms", error);
     } finally {
@@ -193,18 +150,11 @@ export function MatchList() {
   const sortedData = useMemo(() => {
     return [...data].sort((a, b) => {
       if (sortKey === 'confidence') {
-        return (b.analysis?.mathAnalysis.confidence || 0) - (a.analysis?.mathAnalysis.confidence || 0);
+        return (b.confidence || 0) - (a.confidence || 0);
       }
-      // Default sort by date
-      return new Date(a.fixture.date).getTime() - new Date(b.fixture.date).getTime();
+      return new Date(b.match_date!).getTime() - new Date(a.match_date!).getTime();
     });
   }, [data, sortKey]);
-
-  const strengthData = selectedMatch?.analysis?.mathAnalysis.stats.home_attack ? [
-    { name: 'Hücum Gücü', home: selectedMatch.analysis.mathAnalysis.stats.home_attack, away: selectedMatch.analysis.mathAnalysis.stats.away_attack },
-    { name: 'Savunma Gücü', home: selectedMatch.analysis.mathAnalysis.stats.home_defense, away: selectedMatch.analysis.mathAnalysis.stats.away_defense },
-  ] : [];
-
 
   return (
     <div className="space-y-4">
@@ -221,16 +171,16 @@ export function MatchList() {
                     Güven Skoruna Göre
                 </Button>
             </div>
-            <Button onClick={handleRefresh} disabled={isLoading} className="w-full sm:w-auto">
+            <Button onClick={handleRefreshAndAnalyze} disabled={isLoading} className="w-full sm:w-auto">
               <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-              {isLoading ? "Analiz Ediliyor..." : "Fikstürü Yenile ve Analiz Et"}
+              {isLoading ? "İşlem Devam Ediyor..." : "Fikstürü Yenile ve Analiz Et"}
             </Button>
         </CardContent>
       </Card>
       
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {isLoading ? (
+        {isLoading && data.length === 0 ? (
             [...Array(6)].map((_, i) => <Skeleton key={i} className="h-56 w-full" />)
         ) : sortedData.length === 0 ? (
           <div className="col-span-full text-center py-10 border-2 border-dashed rounded-lg bg-muted/50">
@@ -239,29 +189,30 @@ export function MatchList() {
           </div>
         ) : (
           sortedData.map((match) => (
-            <Card key={match.fixture.id} onClick={() => handleCardClick(match)} className={cn("hover:shadow-md transition-shadow cursor-pointer group flex flex-col", !match.analysis && "opacity-60 pointer-events-none")}>
+            <Card key={match.id} onClick={() => handleCardClick(match)} className={cn("hover:shadow-md transition-shadow cursor-pointer group flex flex-col", match.confidence === null && "opacity-60")}>
               <CardContent className="p-4 flex-grow flex flex-col">
-                <div className="flex justify-between items-start mb-2 pb-2 border-b">
+                 <div className="flex justify-between items-start mb-2 pb-2 border-b">
                   <div className="flex items-center gap-2">
-                    {match.league.logo && <img src={match.league.logo} alt="lig" className="w-5 h-5 object-contain"/>}
-                    <Badge variant="secondary" className="text-[10px] font-normal px-1.5 h-5">{match.league.name}</Badge>
+                     <Badge variant="secondary" className="text-[10px] font-normal px-1.5 h-5">{match.status}</Badge>
                   </div>
-                  <span suppressHydrationWarning className="text-xs text-muted-foreground font-mono">
-                    {match.fixture.date ? format(new Date(match.fixture.date), "dd.MM HH:mm") : '-'}
+                   <span suppressHydrationWarning className="text-xs text-muted-foreground font-mono">
+                    {match.match_date ? format(new Date(match.match_date), "dd.MM HH:mm") : '-'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center gap-2 mb-4">
                   <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
-                    {match.teams.home.logo ? <img src={match.teams.home.logo} alt={match.teams.home.name} className="w-10 h-10 object-contain group-hover:scale-110 transition-transform" /> : <Trophy className="w-8 h-8 text-gray-200" />}
-                    <span className="text-xs font-bold text-center leading-tight line-clamp-2 w-full">{match.teams.home.name}</span>
+                    <img src={match.homeTeam?.logoUrl || ''} alt={match.homeTeam?.name || ''} className="w-10 h-10 object-contain group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-bold text-center leading-tight line-clamp-2 w-full">{match.homeTeam?.name}</span>
                   </div>
                   <div className="flex flex-col items-center justify-center min-w-[70px]">
-                    <span className="text-lg font-black tracking-widest text-muted-foreground">{match.analysis?.mathAnalysis.score_prediction || "- : -"}</span>
-                    <span className="text-[9px] text-muted-foreground mt-0.5 uppercase tracking-wider font-semibold">{match.fixture.status.short}</span>
+                    <span className="text-lg font-black tracking-widest text-muted-foreground">{match.predicted_score || "- : -"}</span>
+                    <span className="text-[9px] text-muted-foreground mt-0.5 uppercase tracking-wider font-semibold">
+                      {isAnalyzing[match.id] ? <Loader2 className="animate-spin" /> : (match.confidence === null ? 'ANALİZ BEKLİYOR' : 'TAHMİN')}
+                    </span>
                   </div>
                   <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
-                    {match.teams.away.logo ? <img src={match.teams.away.logo} alt={match.teams.away.name} className="w-10 h-10 object-contain group-hover:scale-110 transition-transform" /> : <Trophy className="w-8 h-8 text-gray-200" />}
-                    <span className="text-xs font-bold text-center leading-tight line-clamp-2 w-full">{match.teams.away.name}</span>
+                    <img src={match.awayTeam?.logoUrl || ''} alt={match.awayTeam?.name || ''} className="w-10 h-10 object-contain group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-bold text-center leading-tight line-clamp-2 w-full">{match.awayTeam?.name}</span>
                   </div>
                 </div>
 
@@ -269,21 +220,21 @@ export function MatchList() {
                     <div className="w-full">
                         <div className="flex justify-between items-center mb-1">
                             <span className="text-xs font-medium flex items-center gap-1.5 text-accent"><Zap size={14}/> Güven Skoru</span>
-                            <span className="text-sm font-bold text-accent">{match.analysis?.mathAnalysis.confidence.toFixed(1)}%</span>
+                            <span className="text-sm font-bold text-accent">{match.confidence?.toFixed(1) || '--'}%</span>
                         </div>
-                        <Progress value={match.analysis?.mathAnalysis.confidence || 0} className="h-2 [&>div]:bg-accent" />
+                        <Progress value={match.confidence || 0} className="h-2 [&>div]:bg-accent" />
                     </div>
                      <div className="flex justify-around text-center text-xs text-muted-foreground pt-2">
                         <div>
-                            <p className="font-bold text-sm text-primary">{match.analysis?.mathAnalysis.home_win || 0}%</p>
+                            <p className="font-bold text-sm text-primary">{match.home_win_prob?.toFixed(1) || '0'}%</p>
                             <p>Ev Sahibi</p>
                         </div>
                         <div>
-                            <p className="font-bold text-sm">{match.analysis?.mathAnalysis.draw || 0}%</p>
+                            <p className="font-bold text-sm">{match.draw_prob?.toFixed(1) || '0'}%</p>
                             <p>Beraberlik</p>
                         </div>
                          <div>
-                            <p className="font-bold text-sm text-destructive">{match.analysis?.mathAnalysis.away_win || 0}%</p>
+                            <p className="font-bold text-sm text-destructive">{match.away_win_prob?.toFixed(1) || '0'}%</p>
                             <p>Deplasman</p>
                         </div>
                     </div>
@@ -299,45 +250,45 @@ export function MatchList() {
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle className="text-xl font-headline">
-              {selectedMatch ? `${selectedMatch.teams.home.name} vs ${selectedMatch.teams.away.name}` : 'Analiz'}
+              {selectedMatch ? `${selectedMatch.homeTeam?.name} vs ${selectedMatch.awayTeam?.name}` : 'Analiz'}
             </DialogTitle>
             <DialogDescription>
               Matematiksel model ve kural tabanlı yorumun birleşimi.
             </DialogDescription>
           </DialogHeader>
-          {selectedMatch?.analysis && (
+          {selectedMatch?.confidence !== null && (
             <div className="grid md:grid-cols-5 gap-x-8 gap-y-6 py-4 text-sm">
                 <div className="md:col-span-2 space-y-4">
                     <h3 className="font-semibold text-primary flex items-center gap-2"><BrainCircuit size={18}/> Matematiksel Analiz</h3>
                     <div className="flex justify-between items-center bg-muted p-3 rounded-lg">
                         <span className="font-medium text-muted-foreground flex items-center gap-2"><Percent size={16}/> Olasılıklar</span>
                         <div className="flex gap-4">
-                            <span className="font-mono" title="Ev Sahibi">{`1: ${selectedMatch.analysis.mathAnalysis.home_win}%`}</span>
-                            <span className="font-mono" title="Beraberlik">{`X: ${selectedMatch.analysis.mathAnalysis.draw}%`}</span>
-                            <span className="font-mono" title="Deplasman">{`2: ${selectedMatch.analysis.mathAnalysis.away_win}%`}</span>
+                            <span className="font-mono" title="Ev Sahibi">{`1: ${selectedMatch!.home_win_prob!.toFixed(1)}%`}</span>
+                            <span className="font-mono" title="Beraberlik">{`X: ${selectedMatch!.draw_prob!.toFixed(1)}%`}</span>
+                            <span className="font-mono" title="Deplasman">{`2: ${selectedMatch!.away_win_prob!.toFixed(1)}%`}</span>
                         </div>
                     </div>
                      <div className="flex justify-between items-center bg-muted p-3 rounded-lg">
                         <span className="font-medium text-muted-foreground flex items-center gap-2"><Target size={16}/> Tahmini Skor</span>
-                        <span className="font-bold text-lg font-mono">{selectedMatch.analysis.mathAnalysis.score_prediction}</span>
+                        <span className="font-bold text-lg font-mono">{selectedMatch!.predicted_score}</span>
                     </div>
                      <div className="flex justify-between items-center border bg-card p-3 rounded-lg">
                         <span className="font-medium text-accent flex items-center gap-2"><Zap size={16}/> Güven Skoru</span>
-                        <span className="font-bold text-lg text-accent">{selectedMatch.analysis.mathAnalysis.confidence}%</span>
+                        <span className="font-bold text-lg text-accent">{selectedMatch!.confidence!.toFixed(1)}%</span>
                     </div>
                 </div>
 
                 <div className="md:col-span-3 space-y-3">
                      <h3 className="font-semibold text-primary flex items-center gap-2"><Bot size={18}/> Analiz Yorumu</h3>
                      <p className="text-muted-foreground leading-relaxed bg-muted/50 p-4 rounded-lg border">
-                        {selectedMatch.analysis.aiInterpretation}
+                        {/* AI Interpretation needs to be generated or fetched */}
+                        AI Yorumu...
                      </p>
                 </div>
                 
-                {strengthData && strengthData.length > 0 && (
-                  <div className="md:col-span-3">
+                <div className="md:col-span-3">
                     <h3 className="font-semibold text-primary flex items-center gap-2 mb-4"><BarChart2 size={18}/> Güç Karşılaştırması</h3>
-                    <ResponsiveContainer width="100%" height={150}>
+                    {/* <ResponsiveContainer width="100%" height={150}>
                         <BarChart data={strengthData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                             <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false}/>
                             <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value.toFixed(1)}`}/>
@@ -345,9 +296,8 @@ export function MatchList() {
                             <Bar dataKey="home" fill="hsl(var(--primary))" name="Ev Sahibi" radius={[4, 4, 0, 0]} />
                             <Bar dataKey="away" fill="hsl(var(--destructive))" name="Deplasman" radius={[4, 4, 0, 0]} />
                         </BarChart>
-                    </ResponsiveContainer>
+                    </ResponsiveContainer> */}
                   </div>
-                )}
 
                 <div className="md:col-span-2">
                     <h3 className="font-semibold text-primary flex items-center gap-2 mb-4"><Flame size={18}/> Form Durumu</h3>
@@ -358,8 +308,8 @@ export function MatchList() {
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {homeTeamForm && <TeamForm form={homeTeamForm} teamName={selectedMatch.teams.home.name} />}
-                            {awayTeamForm && <TeamForm form={awayTeamForm} teamName={selectedMatch.teams.away.name} />}
+                            {homeTeamForm && <TeamForm form={homeTeamForm} teamName={selectedMatch!.homeTeam!.name!} />}
+                            {awayTeamForm && <TeamForm form={awayTeamForm} teamName={selectedMatch!.awayTeam!.name!} />}
                         </div>
                     )}
                 </div>

@@ -3,12 +3,9 @@
 
 import { db } from "@/db";
 import { matches } from "@/db/schema";
-import { desc, asc, inArray } from "drizzle-orm";
+import { desc, asc, inArray, isNull, and } from "drizzle-orm";
 
 export async function getMatchesWithTeams() {
-  // Drizzle's relational queries are the recommended way to handle this.
-  // The 'with' property uses the relations defined in your schema.ts to
-  // correctly join and structure the data for home and away teams.
   const result = await db.query.matches.findMany({
     with: {
         homeTeam: true,
@@ -20,15 +17,34 @@ export async function getMatchesWithTeams() {
   return result;
 }
 
-export async function getUpcomingMatches() {
+export async function getAnalyzedUpcomingMatches() {
     const result = await db.query.matches.findMany({
-        where: inArray(matches.status, ['NS', 'TBD']),
+        where: and(
+            inArray(matches.status, ['NS', 'TBD']),
+            isNotNull(matches.confidence)
+        ),
         with: {
             homeTeam: true,
             awayTeam: true
         },
         orderBy: [asc(matches.match_date)],
         limit: 3
+    });
+    return result;
+}
+
+
+export async function getMatchesToAnalyze() {
+    const result = await db.query.matches.findMany({
+        where: and(
+            inArray(matches.status, ['NS', 'TBD']),
+            isNull(matches.confidence) // Only get matches that have not been analyzed
+        ),
+        with: {
+            homeTeam: true,
+            awayTeam: true
+        },
+        orderBy: [asc(matches.match_date)]
     });
     return result;
 }

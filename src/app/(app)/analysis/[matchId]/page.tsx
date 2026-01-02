@@ -1,4 +1,3 @@
-import { matches } from "@/lib/mock-data";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import { PageHeader } from "@/components/shared/page-header";
@@ -10,16 +9,41 @@ import { OddsAnalysis } from "@/components/analysis/odds-analysis";
 import { PredictionExplanation } from "@/components/analysis/prediction-explanation";
 import { Progress } from "@/components/ui/progress";
 import { Calendar, Shield } from "lucide-react";
+import { db } from "@/db";
+import { matches } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import type { MatchWithTeams } from "@/lib/types";
 
-export default function MatchAnalysisPage({
+async function getMatch(matchId: string): Promise<MatchWithTeams | null> {
+    const id = parseInt(matchId, 10);
+    if (isNaN(id)) return null;
+
+    const result = await db.query.matches.findFirst({
+        where: eq(matches.id, id),
+        with: {
+            homeTeam: true,
+            awayTeam: true,
+        },
+    });
+    return result || null;
+}
+
+export default async function MatchAnalysisPage({
   params,
 }: {
   params: { matchId: string };
 }) {
-  const match = matches.find((m) => m.id.toString() === params.matchId);
+  const match = await getMatch(params.matchId);
 
-  if (!match) {
+  if (!match || match.confidence === null) {
     notFound();
+  }
+
+  let predictedWinner = 'Draw';
+  if (match.home_win_prob! > match.away_win_prob! && match.home_win_prob! > match.draw_prob!) {
+      predictedWinner = match.homeTeam!.name!;
+  } else if (match.away_win_prob! > match.home_win_prob! && match.away_win_prob! > match.draw_prob!) {
+      predictedWinner = match.awayTeam!.name!;
   }
 
   return (
@@ -28,38 +52,38 @@ export default function MatchAnalysisPage({
         <div className="flex items-center justify-center gap-4 md:gap-8 mb-4">
           <div className="flex flex-col items-center gap-2">
             <Image
-              src={match.homeTeam.logoUrl}
-              alt={match.homeTeam.name}
+              src={match.homeTeam!.logoUrl!}
+              alt={match.homeTeam!.name!}
               width={80}
               height={80}
               className="rounded-full"
               data-ai-hint="team logo"
             />
             <h1 className="font-headline text-2xl md:text-3xl font-bold">
-              {match.homeTeam.name}
+              {match.homeTeam!.name}
             </h1>
           </div>
           <span className="text-4xl font-bold text-muted-foreground">VS</span>
           <div className="flex flex-col items-center gap-2">
             <Image
-              src={match.awayTeam.logoUrl}
-              alt={match.awayTeam.name}
+              src={match.awayTeam!.logoUrl!}
+              alt={match.awayTeam!.name!}
               width={80}
               height={80}
               className="rounded-full"
               data-ai-hint="team logo"
             />
             <h1 className="font-headline text-2xl md:text-3xl font-bold">
-              {match.awayTeam.name}
+              {match.awayTeam!.name}
             </h1>
           </div>
         </div>
         <div className="flex items-center gap-4 text-muted-foreground text-sm">
-             <span>{match.league.name}</span>
-             <span className="text-xs">&bull;</span>
+             {/* <span>{match.league.name}</span> */}
+             {/* <span className="text-xs">&bull;</span> */}
              <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
-                {new Date(match.date).toLocaleDateString()}
+                {new Date(match.match_date!).toLocaleDateString()}
              </div>
         </div>
       </div>
@@ -68,7 +92,7 @@ export default function MatchAnalysisPage({
         <Card className="lg:col-span-3 bg-primary text-primary-foreground">
           <CardHeader className="text-center">
             <CardTitle className="font-headline text-2xl">
-              Prediction: {match.prediction} Win
+              Prediction: {predictedWinner} Win
             </CardTitle>
           </CardHeader>
           <CardContent className="text-center">
@@ -78,7 +102,7 @@ export default function MatchAnalysisPage({
                         <Shield className="w-5 h-5" />
                         Confidence Level
                     </span>
-                    <span className="font-bold text-lg">{match.confidence}%</span>
+                    <span className="font-bold text-lg">{match.confidence.toFixed(1)}%</span>
                 </div>
                 <Progress value={match.confidence} className="h-3 bg-primary-foreground/20 [&>div]:bg-accent" />
             </div>
@@ -90,6 +114,7 @@ export default function MatchAnalysisPage({
         <div className="lg:col-span-3">
             <PredictionExplanation match={match} />
         </div>
+        {/*
         <Card>
           <CardHeader>
             <CardTitle className="font-headline">Team Form</CardTitle>
@@ -101,6 +126,7 @@ export default function MatchAnalysisPage({
         </Card>
         <HeadToHead matches={match.h2h} />
         <OddsAnalysis odds={match.odds} />
+        */}
       </div>
     </div>
   );

@@ -8,12 +8,19 @@ const sqlite = new Database(dbPath, { fileMustExist: false });
 
 // Simple one-time check and creation of tables
 try {
-    // Check if the main 'matches' table exists.
-    sqlite.prepare(`SELECT id FROM matches LIMIT 1`).get();
+    // Check if the main 'matches' table has the new analysis columns.
+    // If this fails, we assume the schema is old and needs to be created.
+    sqlite.prepare(`SELECT home_win_prob FROM matches LIMIT 1`).get();
 } catch (error) {
-    // If the table doesn't exist, it's likely the first run.
-    console.log("Database tables not found, creating them now...");
+    // If the columns don't exist, we'll recreate the tables.
+    // This is a simple migration strategy for this project. For a real-world app,
+    // a more robust migration tool (like drizzle-kit migrate) would be used.
+    console.log("Database schema is outdated or not found, recreating tables...");
     try {
+        sqlite.exec('DROP TABLE IF EXISTS "matches";');
+        sqlite.exec('DROP TABLE IF EXISTS "teams";');
+        sqlite.exec('DROP TABLE IF EXISTS "leagues";');
+        
         sqlite.exec(`
             CREATE TABLE "leagues" (
                 "id" integer PRIMARY KEY NOT NULL,
@@ -37,14 +44,18 @@ try {
                 "status" text,
                 "home_odd" real,
                 "draw_odd" real,
-                "away_odd" real
+                "away_odd" real,
+                "home_win_prob" real,
+                "draw_prob" real,
+                "away_win_prob" real,
+                "predicted_score" text,
+                "confidence" real
             );
             CREATE UNIQUE INDEX "matches_api_fixture_id_unique" ON "matches" ("api_fixture_id");
         `);
-        console.log("Database tables created successfully.");
+        console.log("Database tables recreated successfully with new schema.");
     } catch (creationError) {
         console.error("Failed to create database tables:", creationError);
-        // If creation fails, we should throw to prevent the app from running in a broken state.
         throw new Error("Failed to initialize the database schema.");
     }
 }

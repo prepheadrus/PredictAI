@@ -4,12 +4,12 @@ import { explainPrediction } from "@/ai/flows/explainable-predictions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { useState } from "react";
-import type { Match } from "@/lib/types";
+import type { MatchWithTeams } from "@/lib/types";
 import { Skeleton } from "../ui/skeleton";
 import { Wand2 } from "lucide-react";
 
 interface PredictionExplanationProps {
-  match: Match;
+  match: MatchWithTeams;
 }
 
 export function PredictionExplanation({ match }: PredictionExplanationProps) {
@@ -23,15 +23,21 @@ export function PredictionExplanation({ match }: PredictionExplanationProps) {
     setExplanation(null);
     try {
       const matchDataString = `
-        Teams: ${match.homeTeam.name} vs ${match.awayTeam.name}
-        League: ${match.league.name}
-        Odds: Home: ${match.odds.home}, Draw: ${match.odds.draw}, Away: ${match.odds.away}
-        Home Form: ${match.homeTeamForm.join(', ')}
-        Away Form: ${match.awayTeamForm.join(', ')}
+        Teams: ${match.homeTeam?.name} vs ${match.awayTeam?.name}
+        Odds: Home: ${match.home_odd}, Draw: ${match.draw_odd}, Away: ${match.away_odd}
+        Analysis: Home Win: ${match.home_win_prob}%, Draw: ${match.draw_prob}%, Away Win: ${match.away_win_prob}%
       `;
+      
+      let predictedWinner = 'Draw';
+        if (match.home_win_prob! > match.away_win_prob! && match.home_win_prob! > match.draw_prob!) {
+            predictedWinner = match.homeTeam!.name!;
+        } else if (match.away_win_prob! > match.home_win_prob! && match.away_win_prob! > match.draw_prob!) {
+            predictedWinner = match.awayTeam!.name!;
+        }
+
       const result = await explainPrediction({
         matchData: matchDataString,
-        prediction: `The model predicts: ${match.prediction} win with ${match.confidence}% confidence.`,
+        prediction: `The model predicts: ${predictedWinner} win with ${match.confidence}% confidence.`,
       });
       setExplanation(result.explanation);
     } catch (e) {

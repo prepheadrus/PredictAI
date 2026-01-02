@@ -2,7 +2,7 @@
 
 import { MatchPredictionCard } from "./match-prediction-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "../ui/card";
-import { getUpcomingMatches } from "@/app/actions";
+import { getAnalyzedUpcomingMatches } from "@/app/actions";
 import type { MatchWithTeams } from "@/lib/types";
 import { useEffect, useState } from "react";
 import { Skeleton } from "../ui/skeleton";
@@ -41,7 +41,8 @@ export function UpcomingMatches() {
     const fetchMatches = async () => {
       setIsLoading(true);
       try {
-        const matches = await getUpcomingMatches();
+        // Fetch only analyzed matches
+        const matches = await getAnalyzedUpcomingMatches();
         setUpcoming(matches);
       } catch (error) {
         console.error("Failed to fetch upcoming matches:", error);
@@ -57,7 +58,7 @@ export function UpcomingMatches() {
       <CardHeader>
         <CardTitle className="font-headline">Upcoming Predictions</CardTitle>
         <CardDescription>
-          Analysis for the next set of matches.
+          Your top 3 analyzed matches. For more, go to the Match Center.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -71,8 +72,8 @@ export function UpcomingMatches() {
           </div>
         ) : (
           <div className="text-center text-muted-foreground py-8">
-            <p>No upcoming matches found.</p>
-            <p className="text-sm">Try refreshing the data in the Match Center.</p>
+            <p>No analyzed upcoming matches found.</p>
+            <p className="text-sm">Go to the Match Center to run a new analysis.</p>
           </div>
         )}
       </CardContent>

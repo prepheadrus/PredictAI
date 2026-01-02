@@ -26,6 +26,12 @@ export const matches = sqliteTable('matches', {
     home_odd: real('home_odd'),
     draw_odd: real('draw_odd'),
     away_odd: real('away_odd'),
+    // Analysis fields
+    home_win_prob: real('home_win_prob'),
+    draw_prob: real('draw_prob'),
+    away_win_prob: real('away_win_prob'),
+    predicted_score: text('predicted_score'),
+    confidence: real('confidence'),
 }, (table) => {
     return {
         fixture_idx: uniqueIndex('matches_api_fixture_id_unique').on(table.api_fixture_id),

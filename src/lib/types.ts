@@ -7,17 +7,17 @@ export interface League {
   country: string;
 }
 
-// export interface Team {
-//   id: number;
-//   name: string;
-//   logoUrl: string;
-// }
-
 export type Team = InferSelectModel<typeof teams>;
 
 export type MatchWithTeams = InferSelectModel<typeof matches> & {
     homeTeam: Team | null;
     awayTeam: Team | null;
+}
+
+export interface FormResult {
+  result: "W" | "D" | "L";
+  opponentName: string;
+  score: string;
 }
 
 export interface Match {
@@ -39,8 +39,8 @@ export interface Match {
     awayScore: number;
   };
   h2h: Match[];
-  homeTeamForm: ('W' | 'D' | 'L')[];
-  awayTeamForm: ('W' | 'D' | 'L')[];
+  homeTeamForm: FormResult[];
+  awayTeamForm: FormResult[];
 }
 
 export interface PortfolioItem extends Match {
