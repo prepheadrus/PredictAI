@@ -1,3 +1,5 @@
+"use client";
+
 import { DollarSign, Percent, TrendingUp } from "lucide-react";
 import { StatCard } from "../shared/stat-card";
 import { portfolio } from "@/lib/mock-data";
