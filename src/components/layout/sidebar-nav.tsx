@@ -25,6 +25,7 @@ import { usePathname } from "next/navigation";
 const menuItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/match-center", label: "Match Center", icon: ListCollapse },
+  { href: "/league-status", label: "League Status", icon: Presentation },
   { href: "/portfolio", label: "Portfolio", icon: BarChart3 },
   { href: "/data-management", label: "Data Management", icon: FileUp },
   { href: "/settings", label: "Settings", icon: Settings },
