@@ -256,7 +256,7 @@ export function MatchList() {
               Matematiksel model ve kural tabanlı yorumun birleşimi.
             </DialogDescription>
           </DialogHeader>
-          {selectedMatch?.confidence !== null && (
+          {selectedMatch && (
             <div className="grid md:grid-cols-5 gap-x-8 gap-y-6 py-4 text-sm">
                 <div className="md:col-span-2 space-y-4">
                     <h3 className="font-semibold text-primary flex items-center gap-2"><BrainCircuit size={18}/> Matematiksel Analiz</h3>
