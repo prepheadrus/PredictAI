@@ -80,7 +80,6 @@ export function MatchList() {
 
       toast({ title: "Fikstür Çekildi", description: `${ingestResult.processed} maç veritabanına işlendi. Analizler başlıyor.` });
       
-      // Re-fetch matches to get a fresh list including newly ingested ones
       const refreshedMatches = await getMatchesWithTeams();
       setData(refreshedMatches);
 
@@ -88,7 +87,7 @@ export function MatchList() {
       if(matchesToAnalyze.length === 0){
           toast({ title: "Her Şey Güncel", description: "Analiz bekleyen yeni maç bulunamadı." });
           setIsLoading(false);
-          await fetchAllMatches(); // Still refresh the list
+          await fetchAllMatches();
           return;
       }
       
@@ -105,7 +104,6 @@ export function MatchList() {
                   if (!analysisResponse.ok) {
                       throw new Error(analysisResult.error || `Analysis failed for match ${match.id}`);
                   }
-                  // Update the specific match in our local state
                   setData(prevData => prevData.map(m => m.id === match.id ? { ...m, ...analysisResult.updatedMatch } : m));
               } catch(e: any) {
                   console.error(`Analysis failed for match ${match.id}:`, e.message);
@@ -144,7 +142,6 @@ export function MatchList() {
     setAwayTeamForm(null);
     setSelectedMatchAnalysis(null);
 
-    // Fetch full analysis for the modal
     try {
         const host = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:9002';
         const response = await fetch(`${host}/api/ai-predict`, {
@@ -188,7 +185,10 @@ export function MatchList() {
       if (sortKey === 'confidence') {
         return (b.confidence || 0) - (a.confidence || 0);
       }
-      return new Date(b.match_date!).getTime() - new Date(a.match_date!).getTime();
+      // Ensure match_date is not null before comparing
+      const dateA = a.match_date ? new Date(a.match_date).getTime() : 0;
+      const dateB = b.match_date ? new Date(b.match_date).getTime() : 0;
+      return dateB - dateA;
     });
   }, [data, sortKey]);
 
@@ -350,5 +350,3 @@ export function MatchList() {
     </div>
   );
 }
-
-    
