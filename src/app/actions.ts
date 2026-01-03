@@ -32,19 +32,3 @@ export async function getAnalyzedUpcomingMatches() {
     });
     return result;
 }
-
-
-export async function getMatchesToAnalyze() {
-    const result = await db.query.matches.findMany({
-        where: and(
-            inArray(matches.status, ['NS', 'TBD']),
-            isNull(matches.confidence) // Only get matches that have not been analyzed
-        ),
-        with: {
-            homeTeam: true,
-            awayTeam: true
-        },
-        orderBy: [asc(matches.match_date)]
-    });
-    return result;
-}

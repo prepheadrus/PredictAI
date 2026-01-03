@@ -87,7 +87,7 @@ export function MatchList() {
       if(matchesToAnalyze.length === 0){
           toast({ title: "Her Şey Güncel", description: "Analiz bekleyen yeni maç bulunamadı." });
           setIsLoading(false);
-          await fetchAllMatches();
+          await fetchAllMatches(); // Ensure UI is updated even if no new matches to analyze
           return;
       }
       
@@ -104,9 +104,11 @@ export function MatchList() {
                   if (!analysisResponse.ok) {
                       throw new Error(analysisResult.error || `Analysis failed for match ${match.id}`);
                   }
+                  // Optimistically update the single match data
                   setData(prevData => prevData.map(m => m.id === match.id ? { ...m, ...analysisResult.updatedMatch } : m));
               } catch(e: any) {
                   console.error(`Analysis failed for match ${match.id}:`, e.message);
+                   // Mark as failed to stop retrying, maybe set confidence to a specific error code like -1
                    setData(prevData => prevData.map(m => m.id === match.id ? { ...m, confidence: 0 } : m));
               } finally {
                   setIsAnalyzing(prev => ({ ...prev, [match.id]: false }));
@@ -122,7 +124,7 @@ export function MatchList() {
       toast({ variant: "destructive", title: "İşlem Başarısız", description: error.message });
     } finally {
       setIsLoading(false);
-      await fetchAllMatches();
+      await fetchAllMatches(); // Always refetch all data at the end
     }
   };
   
