@@ -19,10 +19,6 @@ export async function getMatchesWithTeams() {
 
 export async function getAnalyzedUpcomingMatches() {
     const result = await db.query.matches.findMany({
-        where: and(
-            inArray(matches.status, ['NS', 'TBD']),
-            isNotNull(matches.confidence)
-        ),
         with: {
             homeTeam: true,
             awayTeam: true
