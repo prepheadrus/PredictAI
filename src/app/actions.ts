@@ -24,7 +24,6 @@ export async function getMatchesWithTeams() {
   });
   
   console.log('📊 Bulunan maç sayısı:', result.length);
-  console.log('📋 İlk 3 maç:', JSON.stringify(result.slice(0, 3), null, 2));
   
   return result;
 }
@@ -92,3 +91,4 @@ export async function refreshAndAnalyzeMatches() {
         message: `${totalProcessed} maç API'den çekildi. ${analyzedCount} yeni maç analiz edildi.` 
     };
 }
+
