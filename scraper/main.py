@@ -5,6 +5,7 @@ import json
 import requests
 import sys
 import traceback
+import re
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -23,8 +24,6 @@ def setup_driver():
     # Set a common user agent
     options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36')
 
-    # REMOVED for local debugging: --headless=new, --no-sandbox, --disable-dev-shm-usage
-
     try:
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     except Exception as e:
@@ -40,7 +39,7 @@ def setup_driver():
     return driver
 
 def scrape_odds_portal(driver, url):
-    """Navigates to the URL and scrapes match data."""
+    """Navigates to the URL and scrapes match data by parsing page text."""
     print(f"Navigating to {url}...")
     driver.get(url)
     
@@ -52,50 +51,87 @@ def scrape_odds_portal(driver, url):
     scraped_matches = []
     
     try:
-        # Wait for event rows to be present
-        WebDriverWait(driver, 20).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.flex.items-center.min-h-11"))
-        )
+        # Get all visible text from the body
+        page_text = driver.find_element(By.TAG_NAME, "body").text
+        lines = page_text.split('\n')
         
-        # Find all potential match rows
-        match_rows = driver.find_elements(By.CSS_SELECTOR, "div.flex.items-center.min-h-11")
-        print(f"Found {len(match_rows)} potential match rows.")
+        print(f"Analyzing {len(lines)} lines of text from the page.")
+        
+        # Regex to identify time format like XX:XX
+        time_regex = re.compile(r'^\d{2}:\d{2}$')
 
-        for row in match_rows:
-            try:
-                # Find team names
-                team_elements = row.find_elements(By.CSS_SELECTOR, "p.participant-name")
-                if len(team_elements) != 2:
-                    continue # Not a valid match row
-                
-                home_team = team_elements[0].text
-                away_team = team_elements[1].text
-
-                # Find odds elements
-                odd_elements = row.find_elements(By.CSS_SELECTOR, "div.h-7")
-                
-                if len(odd_elements) >= 3:
-                    try:
-                        home_odd = float(odd_elements[0].text)
-                        draw_odd = float(odd_elements[1].text)
-                        away_odd = float(odd_elements[2].text)
-                    except (ValueError, IndexError):
-                        continue # Skip if odds are not valid numbers
+        i = 0
+        while i < len(lines) - 4: # Need at least 5 lines for a potential match (time, team, team, odd, odd)
+            # Find a line that looks like a time
+            if time_regex.match(lines[i]):
+                try:
+                    # Potential match found, check subsequent lines
+                    # OddsPortal structure: Time, TeamA, -, TeamB, odd1, odd2, odd3
+                    # Sometimes there's a "-" between teams, sometimes not. We'll be flexible.
+                    
+                    home_team_index = i + 1
+                    
+                    # Look for the score/vs separator which is often just '-' or 'POSTP.' etc.
+                    # The team names are before this separator
+                    separator_index = -1
+                    for j in range(home_team_index, min(i + 5, len(lines))):
+                         if not lines[j][0].isalpha() and lines[j] != "-": # find separator
+                             separator_index = j
+                             break
+                    
+                    if separator_index == -1:
+                        # Could not find a clear separator, maybe it's the simple format
+                        if lines[i+2] == '-': # Time, Team A, -, Team B ...
+                           home_team = lines[i+1]
+                           away_team = lines[i+3]
+                           odds_start_index = i + 4
+                        else: # Maybe Time, Team A, Team B...
+                           home_team = lines[i+1]
+                           away_team = lines[i+2]
+                           odds_start_index = i + 3
+                    else: # A separator was found
+                        home_team = " ".join(lines[home_team_index:separator_index])
+                        away_team_index = separator_index + 1
+                        # We don't know how many lines away team name takes, but odds must be numbers
+                        away_team_end_index = away_team_index
+                        while away_team_end_index < len(lines) and not lines[away_team_end_index].replace('.','',1).isdigit():
+                            away_team_end_index += 1
                         
-                    match_data = {
-                        "homeTeam": home_team.strip(),
-                        "awayTeam": away_team.strip(),
-                        "homeOdd": home_odd,
-                        "drawOdd": draw_odd,
-                        "awayOdd": away_odd,
-                    }
-                    scraped_matches.append(match_data)
-                    print(f"  -> Scraped: {home_team} vs {away_team} | Odds: {home_odd}, {draw_odd}, {away_odd}")
+                        away_team = " ".join(lines[away_team_index:away_team_end_index])
+                        odds_start_index = away_team_end_index
 
-            except Exception:
-                # Prevents one bad row from stopping the whole script
-                continue
-                
+                    if not home_team or not away_team:
+                        i +=1
+                        continue
+
+                    # Now, get the odds
+                    if odds_start_index + 2 < len(lines):
+                        home_odd = float(lines[odds_start_index])
+                        draw_odd = float(lines[odds_start_index + 1])
+                        away_odd = float(lines[odds_start_index + 2])
+
+                        match_data = {
+                            "homeTeam": home_team.strip(),
+                            "awayTeam": away_team.strip(),
+                            "homeOdd": home_odd,
+                            "drawOdd": draw_odd,
+                            "awayOdd": away_odd,
+                        }
+                        scraped_matches.append(match_data)
+                        print(f"  -> Scraped: {home_team} vs {away_team} | Odds: {home_odd}, {draw_odd}, {away_odd}")
+                        
+                        # Move index past this match
+                        i = odds_start_index + 3
+                        continue
+
+                except (ValueError, IndexError):
+                    # This block wasn't a valid match, move to the next line
+                    i += 1
+                    continue
+            
+            # If not a match, just move to the next line
+            i += 1
+
     except Exception as e:
         print(f"An error occurred during scraping: {e}")
         print("--- TRACEBACK ---")
