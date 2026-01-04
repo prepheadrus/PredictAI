@@ -8,15 +8,9 @@ import { fetchFixtures, mapAndUpsertFixtures, analyzeMatches } from "@/lib/api-f
 import { revalidatePath } from "next/cache";
 import type { MatchWithTeams } from "@/lib/types";
 
-// Lig kodlarını ve API ID'lerini içeren bir harita
-const TARGET_LEAGUES = [
-    { code: 'PL', id: 2021 },  // Premier League
-    { code: 'PD', id: 2014 },  // La Liga
-    { code: 'SA', id: 2019 },  // Serie A
-    { code: 'BL1', id: 2002 }, // Bundesliga
-    { code: 'FL1', id: 2015 }, // Ligue 1
-];
-const TARGET_SEASONS = [2024, 2023]; // Güncel sezonu önce dene (API genellikle mevcut yıla göre çalışır)
+// Using competition codes as per API documentation
+const TARGET_LEAGUES = ['PL', 'PD', 'SA', 'BL1', 'FL1'];
+const TARGET_SEASONS = [2025, 2024]; // Try current season first, then fallback to previous
 
 export async function getMatchesWithTeams() {
   const result = await db.query.matches.findMany({
@@ -50,31 +44,31 @@ export async function refreshAndAnalyzeMatches() {
 
     console.log(`🚀 Server Action: Batch data fetching process started...`);
 
-    for (const league of TARGET_LEAGUES) {
+    for (const leagueCode of TARGET_LEAGUES) {
         let foundDataForLeague = false;
         for (const season of TARGET_SEASONS) {
             if (foundDataForLeague) continue;
             
             try {
-                console.log(`--- Scanning ${league.code} (ID: ${league.id}) for season ${season} ---`);
-                const fixturesResponse = await fetchFixtures(league.id, season);
+                console.log(`--- Scanning ${leagueCode} for season ${season} ---`);
+                const fixturesResponse = await fetchFixtures(leagueCode, season);
                 
                 if (!fixturesResponse || !fixturesResponse.matches || fixturesResponse.matches.length === 0) {
-                    logs.push(`${league.code} Season ${season}: No data found.`);
-                    console.warn(`⚠️ ${league.code} Season ${season}: No data found. Trying next...`);
+                    logs.push(`${leagueCode} Season ${season}: No data found.`);
+                    console.warn(`⚠️ ${leagueCode} Season ${season}: No data found. Trying next...`);
                     continue;
                 }
                 
                 foundDataForLeague = true;
                 const count = await mapAndUpsertFixtures(fixturesResponse);
                 totalProcessed += count;
-                logs.push(`${league.code} Season ${season}: ${count} matches processed.`);
-                console.log(`✅ ${league.code} Season ${season}: ${count} matches processed.`);
+                logs.push(`${leagueCode} Season ${season}: ${count} matches processed.`);
+                console.log(`✅ ${leagueCode} Season ${season}: ${count} matches processed.`);
 
             } catch (seasonError: any)
             {
-                console.error(`❌ ${league.code} Season ${season} error:`, seasonError.message);
-                logs.push(`${league.code} Season ${season} ERROR: ${seasonError.message}`);
+                console.error(`❌ ${leagueCode} Season ${season} error:`, seasonError.message);
+                logs.push(`${leagueCode} Season ${season} ERROR: ${seasonError.message}`);
             }
         }
     }

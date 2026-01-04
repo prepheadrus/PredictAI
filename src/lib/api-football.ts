@@ -1,7 +1,7 @@
 
 import { db } from '@/db';
 import * as schema from '@/db/schema';
-import { eq, isNull, and, sql } from 'drizzle-orm';
+import { eq, isNull, and, sql, asc } from 'drizzle-orm';
 import type { MatchWithTeams } from './types';
 
 const API_URL = 'https://api.football-data.org/v4';
@@ -30,9 +30,9 @@ const apiFetch = async (endpoint: string) => {
   return data;
 };
 
-export async function fetchFixtures(competitionId: number, season: number) {
-  // Use the competitions endpoint for a specific league and season
-  return apiFetch(`competitions/${competitionId}/matches?season=${season}`);
+// This function is now flexible and accepts the competition code as per the documentation
+export async function fetchFixtures(competitionCode: string, season: number) {
+  return apiFetch(`competitions/${competitionCode}/matches?season=${season}`);
 }
 
 
