@@ -7,8 +7,8 @@ import { desc, asc, inArray, isNull, and, not, eq } from "drizzle-orm";
 import { fetchFixtures, mapAndUpsertFixtures, analyzeMatches } from "@/lib/api-football";
 import { revalidatePath } from "next/cache";
 
-const TARGET_LEAGUE = "PL";
-const TARGET_SEASONS = [2024, 2025]; // 2024 for past data, 2025 for current/upcoming
+const TARGET_LEAGUES = ['PL', 'PD', 'SA', 'BL1', 'FL1'];
+const TARGET_SEASONS = [2025, 2024]; // Try 2025 first, then fall back to 2024
 
 export async function getMatchesWithTeams() {
   const result = await db.query.matches.findMany({
@@ -52,34 +52,42 @@ export async function refreshAndAnalyzeMatches() {
 
     console.log(`🚀 Server Action: Batch data fetching process started...`);
 
-    for (const season of TARGET_SEASONS) {
-        try {
-            console.log(`--- Scanning season ${season} ---`);
-            const fixturesResponse = await fetchFixtures(TARGET_LEAGUE, season);
+    for (const league of TARGET_LEAGUES) {
+        let foundDataForLeague = false;
+        for (const season of TARGET_SEASONS) {
+            if (foundDataForLeague) continue; // If we found data for a league in a season, don't check older seasons for it.
             
-            if (!fixturesResponse || !fixturesResponse.matches || fixturesResponse.matches.length === 0) {
-                logs.push(`Season ${season}: No data found.`);
-                continue;
-            }
-            
-            const count = await mapAndUpsertFixtures(fixturesResponse);
-            totalProcessed += count;
-            logs.push(`Season ${season}: ${count} matches processed.`);
+            try {
+                console.log(`--- Scanning ${league} for season ${season} ---`);
+                const fixturesResponse = await fetchFixtures(league, season);
+                
+                if (!fixturesResponse || !fixturesResponse.matches || fixturesResponse.matches.length === 0) {
+                    logs.push(`${league} Season ${season}: No data found.`);
+                    console.warn(`⚠️ ${league} Season ${season}: No data found. Trying next...`);
+                    continue;
+                }
+                
+                foundDataForLeague = true; // Mark that we found data for this league
+                const count = await mapAndUpsertFixtures(fixturesResponse);
+                totalProcessed += count;
+                logs.push(`${league} Season ${season}: ${count} matches processed.`);
+                console.log(`✅ ${league} Season ${season}: ${count} matches processed.`);
 
-        } catch (seasonError: any) {
-            console.error(`❌ Season ${season} error:`, seasonError.message);
-            logs.push(`Season ${season} ERROR: ${seasonError.message}`);
-            // Do not stop the whole process, just log and continue
+            } catch (seasonError: any)
+            {
+                console.error(`❌ ${league} Season ${season} error:`, seasonError.message);
+                logs.push(`${league} Season ${season} ERROR: ${seasonError.message}`);
+            }
         }
     }
     
-    console.log(`🎉 Fixtures updated. Total ${totalProcessed} matches processed from API.`);
+    console.log(`🎉 Fixtures update complete. Total ${totalProcessed} matches ingested from API.`);
 
     // Now, run analysis on un-analyzed matches
     let analyzedCount = 0;
     try {
         analyzedCount = await analyzeMatches();
-        console.log(`🔬 Analysis complete. ${analyzedCount} matches were analyzed.`);
+        console.log(`🔬 Analysis complete. ${analyzedCount} new matches were analyzed.`);
     } catch (analysisError: any) {
         console.error('❌ Analysis phase failed:', analysisError.message);
         return { success: false, message: `Fixture refresh complete, but analysis failed: ${analysisError.message}` };
@@ -87,6 +95,7 @@ export async function refreshAndAnalyzeMatches() {
     
     console.log('✅ Full process complete.');
     
+    // Revalidate paths to show new data in the UI
     revalidatePath("/match-center");
     revalidatePath("/dashboard");
 
