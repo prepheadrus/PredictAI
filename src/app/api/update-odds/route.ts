@@ -2,7 +2,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { db } from '@/db';
 import * as schema from '@/db/schema';
-import { eq, and, like, sql } from 'drizzle-orm';
+import { eq, and, like, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 
 // Zod şeması ile gelen veriyi doğruluyoruz
@@ -93,3 +93,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: 'An unexpected error occurred.', error: error.message }, { status: 500 });
   }
 }
+
+    

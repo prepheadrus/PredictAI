@@ -116,6 +116,10 @@ def scrape_odds_portal(driver, url):
                         i +=1
                         continue
 
+                    # Clean team names by removing digits and extra spaces/dashes
+                    home_team = re.sub(r'\d+', '', home_team).replace('-', '').strip()
+                    away_team = re.sub(r'\d+', '', away_team).replace('-', '').strip()
+
                     if odds_start_index + 2 < len(lines):
                         home_odd_str = lines[odds_start_index]
                         draw_odd_str = lines[odds_start_index + 1]
@@ -213,5 +217,7 @@ if __name__ == "__main__":
             print("\nClosing browser.")
             driver.quit()
         print("Script finished.")
+
+    
 
     
