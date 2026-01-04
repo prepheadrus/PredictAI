@@ -2,6 +2,7 @@
 import { db } from '@/db';
 import * as schema from '@/db/schema';
 import { eq, isNull, and, sql } from 'drizzle-orm';
+import type { MatchWithTeams } from './types';
 
 const API_URL = 'https://api.football-data.org/v4';
 
@@ -15,7 +16,7 @@ const apiFetch = async (endpoint: string) => {
     headers: {
       'X-Auth-Token': apiKey,
     },
-    cache: 'no-store', // Always fetch fresh data during ingestion
+    next: { revalidate: 3600 } // Revalidate hourly
   });
 
   const data = await response.json();
@@ -29,9 +30,9 @@ const apiFetch = async (endpoint: string) => {
   return data;
 };
 
-export async function fetchFixtures(leagueCode: string, season: number) {
+export async function fetchFixtures(competitionId: number, season: number) {
   // Use the competitions endpoint for a specific league and season
-  return apiFetch(`competitions/${leagueCode}/matches?season=${season}`);
+  return apiFetch(`competitions/${competitionId}/matches?season=${season}`);
 }
 
 
@@ -176,22 +177,34 @@ export async function analyzeMatches() {
         }
 
         const home_win_prob = Math.random() * (50 - 30) + 30; // 30-50%
-        const away_win_prob = Math.random() * (50 - 30) + 30; // 30-50%
-        const draw_prob = 100 - home_win_prob - away_win_prob;
+        let away_win_prob = Math.random() * (40 - 20) + 20; // 20-40%
+        let draw_prob = 100 - home_win_prob - away_win_prob;
+
+        // Normalize probabilities
+        if (draw_prob < 10) {
+            away_win_prob -= (10 - draw_prob)
+            draw_prob = 10;
+        }
+        const total_prob = home_win_prob + away_win_prob + draw_prob;
+        const final_home_prob = (home_win_prob/total_prob) * 100;
+        const final_away_prob = (away_win_prob/total_prob) * 100;
+        const final_draw_prob = (draw_prob/total_prob) * 100;
+
+
         const confidence = Math.random() * (90 - 60) + 60; // 60-90%
 
         let predicted_score = "1-1";
-        if (home_win_prob > away_win_prob + 5) {
+        if (final_home_prob > final_away_prob + 10) {
              predicted_score = Math.random() > 0.5 ? "2-1" : "1-0";
-        } else if (away_win_prob > home_win_prob + 5) {
+        } else if (final_away_prob > final_home_prob + 10) {
              predicted_score = Math.random() > 0.5 ? "1-2" : "0-1";
         }
 
         await db.update(schema.matches)
             .set({
-                home_win_prob: parseFloat(home_win_prob.toFixed(1)),
-                away_win_prob: parseFloat(away_win_prob.toFixed(1)),
-                draw_prob: parseFloat(draw_prob.toFixed(1)),
+                home_win_prob: parseFloat(final_home_prob.toFixed(1)),
+                away_win_prob: parseFloat(final_away_prob.toFixed(1)),
+                draw_prob: parseFloat(final_draw_prob.toFixed(1)),
                 confidence: parseFloat(confidence.toFixed(1)),
                 predicted_score: predicted_score,
             })
@@ -201,3 +214,16 @@ export async function analyzeMatches() {
     return matchesToAnalyze.length;
 }
 
+export async function getMatchesToAnalyze(): Promise<MatchWithTeams[]> {
+    return db.query.matches.findMany({
+      where: and(
+        eq(schema.matches.status, 'NS'),
+        isNull(schema.matches.confidence)
+      ),
+      with: {
+        homeTeam: true,
+        awayTeam: true,
+      },
+      orderBy: [asc(schema.matches.match_date)],
+    });
+}
