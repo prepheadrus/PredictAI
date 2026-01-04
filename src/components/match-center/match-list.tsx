@@ -1,9 +1,9 @@
 
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useTransition } from "react";
 import { format } from "date-fns";
-import { RefreshCw, Calendar, Trophy, BrainCircuit, Bot, Zap, Percent, Target, BarChart2, ArrowDownUp, Clock, Flame, Loader2 } from "lucide-react";
+import { RefreshCw, Clock, ArrowDownUp, Zap, Percent, Target, BrainCircuit, Bot, Flame, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,31 +16,16 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
 import { Progress } from "../ui/progress";
 import { cn } from "@/lib/utils";
 import { TeamForm, type FormResult } from "../analysis/team-form";
-import { getMatchesWithTeams } from "@/app/actions";
+import { getMatchesWithTeams, refreshAndAnalyzeMatches } from "@/app/actions";
 import type { MatchWithTeams } from "@/lib/types";
-
-
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="p-2 bg-background border rounded-lg shadow-lg">
-        <p className="label font-bold">{`${label}`}</p>
-        <p className="text-primary">{`Ev Sahibi : ${payload[0].value}`}</p>
-        <p className="text-destructive">{`Deplasman : ${payload[1].value}`}</p>
-      </div>
-    );
-  }
-  return null;
-};
 
 
 export function MatchList({ initialMatches }: { initialMatches: MatchWithTeams[] }) {
   const [data, setData] = useState<MatchWithTeams[]>(initialMatches);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isPending, startTransition] = useTransition(); // For Server Action loading state
   const [isAnalyzing, setIsAnalyzing] = useState<Record<number, boolean>>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<MatchWithTeams | null>(null);
@@ -51,82 +36,24 @@ export function MatchList({ initialMatches }: { initialMatches: MatchWithTeams[]
   const [homeTeamForm, setHomeTeamForm] = useState<FormResult[] | null>(null);
   const [awayTeamForm, setAwayTeamForm] = useState<FormResult[] | null>(null);
   const [isFormLoading, setIsFormLoading] = useState(false);
-
-  const fetchAllMatches = useCallback(async () => {
-      setIsLoading(true);
-      try {
-          const matches = await getMatchesWithTeams();
-          setData(matches);
-      } catch (error: any) {
-          toast({ variant: "destructive", title: "Hata", description: `Maçlar çekilemedi: ${error.message}` });
-      } finally {
-          setIsLoading(false);
-      }
-  }, [toast]);
-
+  
+  // This will run whenever the initialMatches prop changes (e.g., after revalidation)
   useEffect(() => {
-      setData(initialMatches);
+    setData(initialMatches);
   }, [initialMatches]);
 
 
-  const handleRefreshAndAnalyze = async () => {
-    setIsAnalyzing({});
-    setIsLoading(true);
-    toast({ title: "Fikstür Yenileniyor...", description: "Yeni maçlar için API kontrol ediliyor." });
-
-    try {
-      const ingestResponse = await fetch('/api/ingest');
-      const ingestResult = await ingestResponse.json();
-      if (!ingestResponse.ok) throw new Error(ingestResult.error || 'Fikstür çekme başarısız.');
-
-      toast({ title: "Fikstür Çekildi", description: `${ingestResult.processed} maç veritabanına işlendi. Analizler başlıyor.` });
-      
-      const refreshedMatches = await getMatchesWithTeams();
-      setData(refreshedMatches);
-
-      const matchesToAnalyze = refreshedMatches.filter(m => m.confidence === null);
-      if(matchesToAnalyze.length === 0){
-          toast({ title: "Her Şey Güncel", description: "Analiz bekleyen yeni maç bulunamadı." });
-          setIsLoading(false);
-          await fetchAllMatches(); // Ensure UI is updated even if no new matches to analyze
-          return;
-      }
-      
-      let analysisPromises = matchesToAnalyze.map(match => {
-          return (async () => {
-              setIsAnalyzing(prev => ({ ...prev, [match.id]: true }));
-              try {
-                  const analysisResponse = await fetch('/api/run-analysis', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ matchId: match.id }),
-                  });
-                  const analysisResult = await analysisResponse.json();
-                  if (!analysisResponse.ok) {
-                      throw new Error(analysisResult.error || `Analysis failed for match ${match.id}`);
-                  }
-                  // Optimistically update the single match data
-                  setData(prevData => prevData.map(m => m.id === match.id ? { ...m, ...analysisResult.updatedMatch } : m));
-              } catch(e: any) {
-                  console.error(`Analysis failed for match ${match.id}:`, e.message);
-                   // Mark as failed to stop retrying, maybe set confidence to a specific error code like -1
-                   setData(prevData => prevData.map(m => m.id === match.id ? { ...m, confidence: 0 } : m));
-              } finally {
-                  setIsAnalyzing(prev => ({ ...prev, [match.id]: false }));
-              }
-          })();
-      });
-
-      await Promise.all(analysisPromises);
-      
-      toast({ title: "Analiz Tamamlandı!", description: `${matchesToAnalyze.length} maçın analizi tamamlandı ve kaydedildi.` });
-      
-    } catch (error: any) {
-      toast({ variant: "destructive", title: "İşlem Başarısız", description: error.message });
-    } finally {
-      setIsLoading(false);
-      await fetchAllMatches(); // Always refetch all data at the end
-    }
+  const handleRefreshAndAnalyze = () => {
+    startTransition(async () => {
+        toast({ title: "Fikstür Yenileniyor...", description: "Yeni maçlar için API kontrol ediliyor ve analizler başlatılıyor." });
+        const result = await refreshAndAnalyzeMatches();
+        if (result.success) {
+            toast({ title: "İşlem Tamamlandı!", description: result.message });
+        } else {
+            toast({ variant: "destructive", title: "İşlem Başarısız", description: result.message });
+        }
+        // The page will be revalidated by the server action, which will update the `initialMatches` prop
+    });
   };
   
   const handleCardClick = async (match: MatchWithTeams) => {
@@ -212,21 +139,19 @@ export function MatchList({ initialMatches }: { initialMatches: MatchWithTeams[]
                     Güven Skoruna Göre
                 </Button>
             </div>
-            <Button onClick={handleRefreshAndAnalyze} disabled={isLoading} className="w-full sm:w-auto">
-              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-              {isLoading ? "İşlem Devam Ediyor..." : "Fikstürü Yenile ve Analiz Et"}
+            <Button onClick={handleRefreshAndAnalyze} disabled={isPending} className="w-full sm:w-auto">
+              <RefreshCw className={`w-4 h-4 mr-2 ${isPending ? "animate-spin" : ""}`} />
+              {isPending ? "İşlem Devam Ediyor..." : "Fikstürü Yenile ve Analiz Et"}
             </Button>
         </CardContent>
       </Card>
       
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {isLoading && data.length === 0 ? (
-            [...Array(6)].map((_, i) => <Skeleton key={i} className="h-56 w-full" />)
-        ) : sortedData.length === 0 ? (
+        {sortedData.length === 0 ? (
           <div className="col-span-full text-center py-10 border-2 border-dashed rounded-lg bg-muted/50">
-            <p className="text-muted-foreground font-medium">Başlamak için fikstürü yenileyin.</p>
-            <p className="text-xs text-muted-foreground mt-1">Yukarıdaki butona basarak verileri çekebilirsiniz.</p>
+            <p className="text-muted-foreground font-medium">Veritabanında hiç maç bulunamadı.</p>
+            <p className="text-xs text-muted-foreground mt-1">Başlamak için fikstürü yenileyin ve verileri çekin.</p>
           </div>
         ) : (
           sortedData.map((match) => (
