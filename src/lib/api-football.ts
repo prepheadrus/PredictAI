@@ -7,11 +7,13 @@ import type { MatchWithTeams } from './types';
 const API_URL = 'https://api.football-data.org/v4';
 
 // This function is now flexible and accepts the competition code as per the documentation
-export async function fetchFixtures(competitionCode: string, season: number) {
-  const apiKey = process.env.FOOTBALL_DATA_API_KEY;
-  if (!apiKey || apiKey === 'your_actual_api_key_here') {
-    console.error('API anahtarı eksik veya ayarlanmamış. Lütfen .env dosyasını kontrol edin.');
-    throw new Error('FOOTBALL_DATA_API_KEY is not defined in .env');
+export async function fetchFixtures(competitionCode: string | number, season: number) {
+  // DIAGNOSTIC STEP: Hardcode the API key to bypass any .env loading issues.
+  const apiKey = 'a938377027ec4af3bba0ae5a3ba19064';
+
+  if (!apiKey) {
+    console.error('CRITICAL: API anahtarı eksik.');
+    throw new Error('FOOTBALL_DATA_API_KEY is not defined');
   }
 
   const endpoint = `competitions/${competitionCode}/matches?season=${season}`;
@@ -26,6 +28,7 @@ export async function fetchFixtures(competitionCode: string, season: number) {
   });
 
   const data = await response.json();
+  console.log(`[API] Raw data received for ${competitionCode} season ${season}:`, JSON.stringify(data, null, 2));
   
   if (!response.ok) {
     console.error(`[API] API call failed for endpoint: ${endpoint}. Status: ${response.status}.`);
@@ -35,8 +38,6 @@ export async function fetchFixtures(competitionCode: string, season: number) {
   }
   
   console.log(`[API] Successfully fetched data for ${competitionCode} season ${season}. Found ${data.matches?.length || 0} matches.`);
-  console.log(`[API] Raw data received:`, JSON.stringify(data, null, 2));
-
 
   return data;
 };
@@ -168,37 +169,43 @@ export async function analyzeMatches() {
             continue;
         }
 
-        const home_win_prob = Math.random() * (50 - 30) + 30;
-        let away_win_prob = Math.random() * (40 - 20) + 20;
-        let draw_prob = 100 - home_win_prob - away_win_prob;
+        try {
+            console.log(`[ANALYSIS] 🔬 Analyzing match: ${match.homeTeam.name} vs ${match.awayTeam.name}`);
+            const host = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+            const response = await fetch(`${host}/api/ai-predict`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    homeTeam: match.homeTeam.name,
+                    awayTeam: match.awayTeam.name,
+                    homeId: match.home_team_id,
+                    awayId: match.away_team_id,
+                    league: "Premier League", // Simplified for now
+                }),
+                cache: 'no-store'
+            });
 
-        if (draw_prob < 10) {
-            away_win_prob -= (10 - draw_prob)
-            draw_prob = 10;
+            if (!response.ok) {
+                const errorResult = await response.json();
+                throw new Error(errorResult.error || `AI Predict API failed with status ${response.status}`);
+            }
+
+            const predictionResult = await response.json();
+            const { mathAnalysis } = predictionResult;
+
+            await db.update(schema.matches)
+                .set({
+                    home_win_prob: mathAnalysis.home_win,
+                    draw_prob: mathAnalysis.draw,
+                    away_win_prob: mathAnalysis.away_win,
+                    predicted_score: mathAnalysis.score_prediction,
+                    confidence: mathAnalysis.confidence,
+                })
+                .where(eq(schema.matches.id, match.id));
+            console.log(`[ANALYSIS] ✅ Successfully analyzed match ID: ${match.id}`);
+        } catch(error: any) {
+            console.error(`[ANALYSIS] ❌ Failed to analyze match ID ${match.id}:`, error.message);
         }
-        const total_prob = home_win_prob + away_win_prob + draw_prob;
-        const final_home_prob = (home_win_prob/total_prob) * 100;
-        const final_away_prob = (away_win_prob/total_prob) * 100;
-        const final_draw_prob = (draw_prob/total_prob) * 100;
-
-        const confidence = Math.random() * (90 - 60) + 60;
-
-        let predicted_score = "1-1";
-        if (final_home_prob > final_away_prob + 10) {
-             predicted_score = Math.random() > 0.5 ? "2-1" : "1-0";
-        } else if (final_away_prob > final_home_prob + 10) {
-             predicted_score = Math.random() > 0.5 ? "1-2" : "0-1";
-        }
-
-        await db.update(schema.matches)
-            .set({
-                home_win_prob: parseFloat(final_home_prob.toFixed(1)),
-                away_win_prob: parseFloat(final_away_prob.toFixed(1)),
-                draw_prob: parseFloat(final_draw_prob.toFixed(1)),
-                confidence: parseFloat(confidence.toFixed(1)),
-                predicted_score: predicted_score,
-            })
-            .where(eq(schema.matches.id, match.id));
     }
     
     return matchesToAnalyze.length;
