@@ -30,7 +30,6 @@ export async function fetchFixtures(competitionCode: string, season: number) {
   });
 
   const data = await response.json();
-  console.log(`[API] Raw data received for ${competitionCode} season ${season}:`, JSON.stringify(data, null, 2));
   
   if (!response.ok) {
     console.error(`[API] API call failed for endpoint: ${endpoint}. Status: ${response.status}.`);
@@ -50,13 +49,7 @@ export async function fetchUpcomingFixtures(competitionCode: string) {
     throw new Error('FOOTBALL_DATA_API_KEY is not defined in .env');
   }
 
-  // Son 30 gün ve gelecek 30 gün
-  const dateFrom = new Date();
-  dateFrom.setDate(dateFrom.getDate() - 30);
-  const dateTo = new Date();
-  dateTo.setDate(dateTo.getDate() + 30);
-
-  const endpoint = `competitions/${competitionCode}/matches?dateFrom=${dateFrom.toISOString().split('T')[0]}&dateTo=${dateTo.toISOString().split('T')[0]}`;
+  const endpoint = `competitions/${competitionCode}/matches?status=SCHEDULED`;
   console.log(`Fetching upcoming from API: ${API_URL}/${endpoint}`);
 
   const response = await fetch(`${API_URL}/${endpoint}`, {
@@ -119,7 +112,7 @@ export async function mapAndUpsertFixtures(fixturesResponse: any) {
 
     let count = 0;
     for (const match of fixtures) {
-         if (!match.competition?.id || !match.competition?.name || !match.area?.name) {
+        if (!match.competition?.id || !match.competition?.name || !match.area?.name) {
             console.warn(`[DB] Skipping match ${match.id} due to missing competition or area data.`);
             continue;
         }

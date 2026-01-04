@@ -8,9 +8,6 @@ import { analyzeMatches } from "@/lib/api-football";
 
 
 export default async function MatchCenterPage() {
-    // Run analysis on any matches that might be pending
-    const analyzedCount = await analyzeMatches();
-    
     const initialMatches = await getMatchesWithTeams();
 
     return (
@@ -26,7 +23,7 @@ export default async function MatchCenterPage() {
                         Match History
                     </CardTitle>
                     <CardDescription>
-                        A log of all ingested matches from the API. {analyzedCount > 0 && `(${analyzedCount} new matches analyzed)`}
+                        A log of all ingested matches from the API.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

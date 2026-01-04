@@ -19,7 +19,7 @@ const apiFetch = async (endpoint: string, apiKey: string) => {
 };
 
 export async function GET(request: NextRequest) {
-  const apiKey = process.env.FOOTBALL_DATA_API_KEY;
+  const apiKey = 'a938377027ec4af3bba0ae5a3ba19064';
   if (!apiKey) {
     return NextResponse.json({ error: 'API key is not configured.' }, { status: 500 });
   }

@@ -10,9 +10,6 @@ import type { MatchWithTeams } from "@/lib/types";
 
 // API'nin desteklediği lig kodları.
 const TARGET_LEAGUES = ['PL', 'PD', 'SA', 'BL1', 'FL1', 'CL', 'DED', 'PPL', 'ELC', 'BSA'];
-// En güncel veriyi bulmak için denenecek sezonlar (önce en yeni).
-// 2025 gibi gelecekteki sezonlar henüz veri içermeyecektir.
-const TARGET_SEASONS = [2024, 2023]; 
 
 export async function getMatchesWithTeams() {
   console.log('🔍 getMatchesWithTeams ÇAĞRILDI');
