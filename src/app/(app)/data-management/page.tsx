@@ -99,7 +99,7 @@ export default function DataManagementPage() {
                     ) : (
                          <div className="flex items-center text-destructive">
                            <AlertTriangle className="mr-2 h-4 w-4" />
-                           <span>API Test Failed!</span>
+                           <span>API Test Failed! (Status: {testResult.status})</span>
                         </div>
                     )}
                     
