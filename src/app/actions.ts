@@ -40,6 +40,8 @@ export async function getAnalyzedUpcomingMatches() {
 
 
 export async function refreshAndAnalyzeMatches() {
+    console.log('🚀🚀🚀 refreshAndAnalyzeMatches BAŞLADI');
+    console.log('🔑 API Key exists (from env):', !!process.env.FOOTBALL_DATA_API_KEY);
     let totalProcessed = 0;
     let logs: string[] = [];
 
@@ -79,7 +81,7 @@ export async function refreshAndAnalyzeMatches() {
 
     let analyzedCount = 0;
     try {
-        console.log(`[ACTION] Starting analysis phase...`);
+        console.log("[ACTION] Starting analysis phase...");
         analyzedCount = await analyzeMatches();
         console.log(`🔬 [ACTION] Analysis complete. ${analyzedCount} new matches were analyzed.`);
     } catch (analysisError: any) {

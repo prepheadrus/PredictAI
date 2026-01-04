@@ -10,6 +10,8 @@ const API_URL = 'https://api.football-data.org/v4';
 export async function fetchFixtures(competitionCode: string | number, season: number) {
   // DIAGNOSTIC STEP: Hardcode the API key to bypass any .env loading issues.
   const apiKey = 'a938377027ec4af3bba0ae5a3ba19064';
+  console.log('🔍 fetchFixtures ÇAĞRILDI:', { competitionCode, season });
+  console.log('🔑 API Key (hardcoded) var mı?', !!apiKey);
 
   if (!apiKey) {
     console.error('CRITICAL: API anahtarı eksik.');
@@ -75,6 +77,8 @@ async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueId: number):
 }
 
 export async function mapAndUpsertFixtures(fixturesResponse: any) {
+    console.log('📝 mapAndUpsertFixtures BAŞLADI');
+    console.log('📊 Gelen veri:', fixturesResponse?.matches?.length, 'maç');
     const fixtures = fixturesResponse.matches;
 
     if (!fixtures || !Array.isArray(fixtures)) {
@@ -91,6 +95,7 @@ export async function mapAndUpsertFixtures(fixturesResponse: any) {
         await processMatch(match, match.competition);
         count++;
     }
+    console.log('✅ Toplam işlenen maç:', count);
     return count;
 }
 
@@ -171,7 +176,7 @@ export async function analyzeMatches() {
 
         try {
             console.log(`[ANALYSIS] 🔬 Analyzing match: ${match.homeTeam.name} vs ${match.awayTeam.name}`);
-            const host = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000';
+            const host = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:9002';
             const response = await fetch(`${host}/api/ai-predict`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
