@@ -3,7 +3,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 const API_URL = 'https://api.football-data.org/v4';
-// DIAGNOSTIC STEP: Hardcode the API key to ensure it's available in this route.
 const FOOTBALL_API_KEY = 'a938377027ec4af3bba0ae5a3ba19064';
 
 interface FormResult {
@@ -11,23 +10,6 @@ interface FormResult {
   opponentName: string;
   score: string;
 }
-
-const apiFetch = async (endpoint: string) => {
-  if (!FOOTBALL_API_KEY) {
-    throw new Error('FOOTBALL_DATA_API_KEY is not configured.');
-  }
-  const response = await fetch(`${API_URL}/${endpoint}`, {
-    headers: { 'X-Auth-Token': FOOTBALL_API_KEY },
-    cache: 'no-store',
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    console.error(`API call failed for endpoint: ${endpoint}. Response: ${JSON.stringify(data)}`);
-    throw new Error(data.message || `API call failed for ${endpoint}`);
-  }
-  return data;
-};
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -37,14 +19,29 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Team ID is required.' }, { status: 400 });
   }
 
+  if (!FOOTBALL_API_KEY) {
+    console.error('CRITICAL: API Key is missing in team-form route.');
+    return NextResponse.json({ error: 'API key is not configured on the server.' }, { status: 500 });
+  }
+
   try {
-    const response = await apiFetch(`teams/${teamId}/matches?status=FINISHED&limit=5`);
+    const endpoint = `teams/${teamId}/matches?status=FINISHED&limit=5`;
+    const response = await fetch(`${API_URL}/${endpoint}`, {
+        headers: { 'X-Auth-Token': FOOTBALL_API_KEY },
+        cache: 'no-store',
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+        console.error(`API call failed for endpoint: ${endpoint}. Response: ${JSON.stringify(data)}`);
+        throw new Error(data.message || `API call failed for ${endpoint}`);
+    }
     
-    if (!response.matches || response.matches.length === 0) {
+    if (!data.matches || data.matches.length === 0) {
       return NextResponse.json([]);
     }
 
-    const form: FormResult[] = response.matches.map((match: any) => {
+    const form: FormResult[] = data.matches.map((match: any) => {
         let result: "W" | "D" | "L";
         const homeScore = match.score.fullTime.home;
         const awayScore = match.score.fullTime.away;
