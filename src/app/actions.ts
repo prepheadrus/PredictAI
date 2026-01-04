@@ -4,12 +4,12 @@
 import { db } from "@/db";
 import { matches } from "@/db/schema";
 import { desc, asc, inArray, isNull, and, not, eq } from "drizzle-orm";
-import { fetchFixtures, mapAndUpsertFixtures, analyzeMatches } from "@/lib/api-football";
+import { fetchFixtures, mapAndUpsertFixtures, analyzeMatches, fetchUpcomingFixtures } from "@/lib/api-football";
 import { revalidatePath } from "next/cache";
 import type { MatchWithTeams } from "@/lib/types";
 
 // API'nin desteklediği lig kodları.
-const TARGET_LEAGUES = ['PL', 'PD', 'SA', 'BL1', 'FL1'];
+const TARGET_LEAGUES = ['PL', 'PD', 'SA', 'BL1', 'FL1', 'CL', 'DED', 'PPL', 'ELC', 'BSA'];
 // En güncel veriyi bulmak için denenecek sezonlar (önce en yeni).
 // 2025 gibi gelecekteki sezonlar henüz veri içermeyecektir.
 const TARGET_SEASONS = [2024, 2023]; 
@@ -54,32 +54,22 @@ export async function refreshAndAnalyzeMatches() {
     console.log(`[ACTION] Veri çekme işlemi başlıyor...`);
 
     for (const leagueCode of TARGET_LEAGUES) {
-        let foundDataForLeague = false;
-        for (const season of TARGET_SEASONS) {
-            if (foundDataForLeague) continue;
+        try {
+            console.log(`--- Fetching current/upcoming matches for ${leagueCode} ---`);
+            const fixturesResponse = await fetchUpcomingFixtures(leagueCode);
             
-            try {
-                console.log(`--- [ACTION] Taranıyor: Lig ${leagueCode}, Sezon ${season} ---`);
-                const fixturesResponse = await fetchFixtures(leagueCode, season);
-                
-                if (!fixturesResponse || !fixturesResponse.matches || fixturesResponse.matches.length === 0) {
-                    logs.push(`${leagueCode} Sezon ${season}: Veri bulunamadı.`);
-                    console.warn(`⚠️ [ACTION] ${leagueCode} Sezon ${season}: Veri bulunamadı. Sonraki sezon deneniyor...`);
-                    continue;
-                }
-                
-                foundDataForLeague = true;
-                console.log(`[ACTION] ${fixturesResponse.matches.length} maç bulundu: Lig ${leagueCode}, Sezon ${season}. İşleniyor...`);
-                const count = await mapAndUpsertFixtures(fixturesResponse);
-                totalProcessed += count;
-                logs.push(`${leagueCode} Sezon ${season}: ${count} maç işlendi.`);
-                console.log(`✅ [ACTION] ${leagueCode} Sezon ${season}: ${count} maç işlendi.`);
-
-            } catch (seasonError: any)
-            {
-                console.error(`❌ [ACTION] Hata: Lig ${leagueCode}, Sezon ${season}. Hata Mesajı:`, seasonError.message);
-                logs.push(`${leagueCode} Sezon ${season} HATA: ${seasonError.message}`);
+            if (!fixturesResponse || !fixturesResponse.matches || fixturesResponse.matches.length === 0) {
+                logs.push(`${leagueCode}: No current matches found.`);
+                continue;
             }
+            
+            const count = await mapAndUpsertFixtures(fixturesResponse);
+            totalProcessed += count;
+            logs.push(`${leagueCode}: ${count} matches processed.`);
+            
+        } catch (error: any) {
+            console.error(`${leagueCode} error:`, error.message);
+            logs.push(`${leagueCode} ERROR: ${error.message}`);
         }
     }
     

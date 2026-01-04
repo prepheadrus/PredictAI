@@ -44,6 +44,37 @@ export async function fetchFixtures(competitionCode: string, season: number) {
   return data;
 };
 
+export async function fetchUpcomingFixtures(competitionCode: string) {
+  const apiKey = 'a938377027ec4af3bba0ae5a3ba19064';
+  if (!apiKey) {
+    throw new Error('FOOTBALL_DATA_API_KEY is not defined in .env');
+  }
+
+  // Son 30 gün ve gelecek 30 gün
+  const dateFrom = new Date();
+  dateFrom.setDate(dateFrom.getDate() - 30);
+  const dateTo = new Date();
+  dateTo.setDate(dateTo.getDate() + 30);
+
+  const endpoint = `competitions/${competitionCode}/matches?dateFrom=${dateFrom.toISOString().split('T')[0]}&dateTo=${dateTo.toISOString().split('T')[0]}`;
+  console.log(`Fetching upcoming from API: ${API_URL}/${endpoint}`);
+
+  const response = await fetch(`${API_URL}/${endpoint}`, {
+    headers: {
+      'X-Auth-Token': apiKey,
+    },
+    cache: 'no-store'
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    console.error(`API call failed: ${response.status}`);
+    throw new Error(data.message || `API call failed`);
+  }
+
+  return data;
+}
+
 
 // Helper to find or create teams and return their DB IDs
 async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueId: number): Promise<{ homeTeamId: number, awayTeamId: number }> {
@@ -88,7 +119,7 @@ export async function mapAndUpsertFixtures(fixturesResponse: any) {
 
     let count = 0;
     for (const match of fixtures) {
-        if (!match.competition?.id || !match.competition?.name || !match.area?.name) {
+         if (!match.competition?.id || !match.competition?.name || !match.area?.name) {
             console.warn(`[DB] Skipping match ${match.id} due to missing competition or area data.`);
             continue;
         }
