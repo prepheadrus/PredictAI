@@ -33,23 +33,30 @@ export async function POST(request: NextRequest) {
 
     for (const matchData of matches) {
       try {
+        // Takım isimlerinin ilk kelimesini alıp LIKE için hazırlıyoruz
         const homeTeamSearchTerm = `${matchData.homeTeam.split(' ')[0]}%`;
         const awayTeamSearchTerm = `${matchData.awayTeam.split(' ')[0]}%`;
 
-        // Drizzle ile ilişkisel sorgu:
-        // Hem homeTeam hem de awayTeam isimlerini 'like' ile arıyoruz ve maçın durumunun 'NS' (Not Started) olduğundan emin oluyoruz.
-        const foundMatches = await db.select({ id: schema.matches.id })
-          .from(schema.matches)
-          .leftJoin(schema.teams, eq(schema.matches.home_team_id, schema.teams.id))
-          .leftJoin(schema.teams, eq(schema.matches.away_team_id, schema.teams.id))
-          .where(and(
-              like(schema.teams.name, homeTeamSearchTerm),
-              like(schema.teams.name, awayTeamSearchTerm),
-              eq(schema.matches.status, 'NS')
-          ));
-          
-        // Birden fazla sonuç dönebilir, ilkini alıyoruz. Daha karmaşık senaryolarda tarih kontrolü de eklenebilir.
-        const matchToUpdate = foundMatches[0];
+        // Drizzle ile ilişkisel sorgu: homeTeam ve awayTeam isimlerini 'like' ile arıyoruz.
+        // Bu, "Manchester United" ile "Man Utd" gibi isimleri eşleştirmeye yardımcı olur.
+        const homeTeamQuery = db.select({ id: schema.teams.id }).from(schema.teams).where(like(schema.teams.name, homeTeamSearchTerm));
+        const awayTeamQuery = db.select({ id: schema.teams.id }).from(schema.teams).where(like(schema.teams.name, awayTeamSearchTerm));
+
+        const [homeTeams, awayTeams] = await Promise.all([homeTeamQuery, awayTeamQuery]);
+
+        if (homeTeams.length === 0 || awayTeams.length === 0) {
+          errors.push(`Could not find a match for teams: ${matchData.homeTeam} or ${matchData.awayTeam}`);
+          continue;
+        }
+
+        // Bulunan ID'ler ile maçı arıyoruz
+        const matchToUpdate = await db.query.matches.findFirst({
+            where: and(
+                eq(schema.matches.home_team_id, homeTeams[0].id),
+                eq(schema.matches.away_team_id, awayTeams[0].id),
+                eq(schema.matches.status, 'NS') // Sadece başlamamış maçları güncelle
+            )
+        });
 
         if (matchToUpdate) {
           await db.update(schema.matches)
@@ -62,7 +69,7 @@ export async function POST(request: NextRequest) {
           
           updatedCount++;
         } else {
-            errors.push(`No match found for: ${matchData.homeTeam} vs ${matchData.awayTeam}`);
+            errors.push(`No 'Not Started' match found for: ${matchData.homeTeam} vs ${matchData.awayTeam}`);
         }
 
       } catch (innerError: any) {
