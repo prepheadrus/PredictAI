@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { RefreshCw, Calendar, Clock, TrendingUp } from "lucide-react";
 import { refreshAndAnalyzeMatches } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 import { tr } from "date-fns/locale";
 import type { MatchWithTeams } from "@/lib/types";
 
@@ -173,7 +173,7 @@ export function MatchList({ initialMatches }: MatchListProps) {
                   {match.match_date && (
                     <div className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
-                      {format(new Date(match.match_date), "dd MMM yyyy HH:mm", { locale: tr })}
+                      {formatInTimeZone(new Date(match.match_date), 'Europe/Istanbul', "dd MMM yyyy HH:mm", { locale: tr })}
                     </div>
                   )}
                   {getStatusBadge(match.status)}
