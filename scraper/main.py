@@ -75,13 +75,15 @@ def scrape_odds_portal(driver, url):
                     # The team names are before this separator
                     separator_index = -1
                     for j in range(home_team_index, min(i + 5, len(lines))):
-                         if not lines[j][0].isalpha() and lines[j] != "-": # find separator
+                         # A valid separator is usually not a word and not a number.
+                         # It's often non-alphanumeric or a short non-word string.
+                         if not lines[j].replace('.', '', 1).isdigit() and not lines[j][0].isalpha() and len(lines[j]) < 5:
                              separator_index = j
                              break
                     
                     if separator_index == -1:
                         # Could not find a clear separator, maybe it's the simple format
-                        if lines[i+2] == '-': # Time, Team A, -, Team B ...
+                        if i + 3 < len(lines) and lines[i+2] == '-': # Time, Team A, -, Team B ...
                            home_team = lines[i+1]
                            away_team = lines[i+3]
                            odds_start_index = i + 4
@@ -202,5 +204,7 @@ if __name__ == "__main__":
             print("\nClosing browser.")
             driver.quit()
         print("Script finished.")
+
+    
 
     
