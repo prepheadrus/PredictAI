@@ -4,7 +4,7 @@
 import { db } from "@/db";
 import { matches } from "@/db/schema";
 import { desc, asc, inArray, isNull, and, not, eq } from "drizzle-orm";
-import { fetchFixtures, mapAndUpsertFixtures } from "@/lib/api-football";
+import { fetchFixtures, mapAndUpsertFixtures, analyzeMatches } from "@/lib/api-football";
 import { revalidatePath } from "next/cache";
 
 const TARGET_LEAGUE = "PL";
@@ -69,50 +69,29 @@ export async function refreshAndAnalyzeMatches() {
         } catch (seasonError: any) {
             console.error(`❌ Season ${season} error:`, seasonError.message);
             logs.push(`Season ${season} ERROR: ${seasonError.message}`);
-            return { success: false, message: `Error fetching data for season ${season}: ${seasonError.message}` };
+            // Do not stop the whole process, just log and continue
         }
     }
     
-    console.log(`🎉 Fixtures updated. Total ${totalProcessed} matches processed.`);
+    console.log(`🎉 Fixtures updated. Total ${totalProcessed} matches processed from API.`);
 
     // Now, run analysis on un-analyzed matches
-    const matchesToAnalyze = await db.query.matches.findMany({
-        where: and(isNull(matches.confidence), eq(matches.status, 'NS')), // Only 'Not Started' matches
-        with: { homeTeam: true, awayTeam: true }
-    });
-
-    if (matchesToAnalyze.length === 0) {
-        revalidatePath("/match-center");
-        revalidatePath("/dashboard");
-        return { success: true, message: `Fixture refresh complete. No new matches were pending analysis.` };
-    }
-
-    console.log(`🔬 Analyzing ${matchesToAnalyze.length} matches...`);
-
-    for (const match of matchesToAnalyze) {
-        if (!match.homeTeam || !match.awayTeam) continue;
-        try {
-            // Internally call the run-analysis route.
-            const host = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:9002';
-            const response = await fetch(`${host}/api/run-analysis`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ matchId: match.id }),
-                 cache: 'no-store'
-            });
-            if (!response.ok) {
-                 const result = await response.json();
-                 console.error(`Analysis failed for match ${match.id}:`, result.error);
-            }
-        } catch(e: any) {
-            console.error(`Analysis request failed for match ${match.id}:`, e.message);
-        }
+    let analyzedCount = 0;
+    try {
+        analyzedCount = await analyzeMatches();
+        console.log(`🔬 Analysis complete. ${analyzedCount} matches were analyzed.`);
+    } catch (analysisError: any) {
+        console.error('❌ Analysis phase failed:', analysisError.message);
+        return { success: false, message: `Fixture refresh complete, but analysis failed: ${analysisError.message}` };
     }
     
-    console.log('✅ Analysis triggered for all pending matches.');
+    console.log('✅ Full process complete.');
     
     revalidatePath("/match-center");
     revalidatePath("/dashboard");
 
-    return { success: true, message: `${totalProcessed} matches processed and analysis triggered for ${matchesToAnalyze.length} matches.` };
+    return { 
+        success: true, 
+        message: `${totalProcessed} matches ingested from API. ${analyzedCount} new matches were analyzed.` 
+    };
 }

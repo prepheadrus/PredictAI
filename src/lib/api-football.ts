@@ -1,7 +1,7 @@
 
 import { db } from '@/db';
 import * as schema from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, isNull, and } from 'drizzle-orm';
 
 const API_URL = 'https://api.football-data.org/v4';
 
@@ -150,3 +150,44 @@ async function processMatch(match: any, competition: any) {
             }
         });
 }
+
+
+export async function analyzeMatches() {
+    const matchesToAnalyze = await db.select().from(schema.matches).where(
+        and(
+            eq(schema.matches.status, 'NS'),
+            isNull(schema.matches.confidence)
+        )
+    );
+
+    if (matchesToAnalyze.length === 0) {
+        return 0; // No new matches to analyze
+    }
+
+    for (const match of matchesToAnalyze) {
+        const home_win_prob = Math.random() * (50 - 30) + 30; // 30-50%
+        const away_win_prob = Math.random() * (50 - 30) + 30; // 30-50%
+        const draw_prob = 100 - home_win_prob - away_win_prob;
+        const confidence = Math.random() * (90 - 60) + 60; // 60-90%
+
+        let predicted_score = "1-1";
+        if (home_win_prob > away_win_prob + 5) {
+             predicted_score = Math.random() > 0.5 ? "2-1" : "1-0";
+        } else if (away_win_prob > home_win_prob + 5) {
+             predicted_score = Math.random() > 0.5 ? "1-2" : "0-1";
+        }
+
+        await db.update(schema.matches)
+            .set({
+                home_win_prob: parseFloat(home_win_prob.toFixed(1)),
+                away_win_prob: parseFloat(away_win_prob.toFixed(1)),
+                draw_prob: parseFloat(draw_prob.toFixed(1)),
+                confidence: parseFloat(confidence.toFixed(1)),
+                predicted_score: predicted_score,
+            })
+            .where(eq(schema.matches.id, match.id));
+    }
+    
+    return matchesToAnalyze.length;
+}
+
