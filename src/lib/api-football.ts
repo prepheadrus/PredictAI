@@ -15,13 +15,13 @@ const apiFetch = async (endpoint: string) => {
     headers: {
       'X-Auth-Token': apiKey,
     },
+    cache: 'no-store', // Always fetch fresh data during ingestion
   });
 
   const data = await response.json();
   if (!response.ok) {
     console.error(`API call failed for endpoint: ${endpoint}. Response: ${JSON.stringify(data)}`);
     const errorMessage = data.message || `API call failed for endpoint: ${endpoint}`;
-    // The API sometimes puts the error in an 'error' property or 'errors' object
     const detailedError = data.error ? JSON.stringify(data.error) : (data.errors ? JSON.stringify(data.errors) : '');
     throw new Error(`${errorMessage} ${detailedError}`);
   }
@@ -29,7 +29,8 @@ const apiFetch = async (endpoint: string) => {
   return data;
 };
 
-export async function fetchFixtures(leagueCode: string, season: string) {
+export async function fetchFixtures(leagueCode: string, season: number) {
+  // Use the competitions endpoint for a specific league and season
   return apiFetch(`competitions/${leagueCode}/matches?season=${season}`);
 }
 
@@ -68,6 +69,11 @@ async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueId: number):
 
 export async function mapAndUpsertFixtures(fixturesResponse: any) {
     const { matches } = fixturesResponse;
+
+    if (!matches) {
+        console.warn("mapAndUpsertFixtures received a response with no 'matches' array.");
+        return 0;
+    }
 
     let count = 0;
     for (const match of matches) {
@@ -127,8 +133,8 @@ async function processMatch(match: any, competition: any) {
         home_team_id: homeTeamId,
         away_team_id: awayTeamId,
         match_date: new Date(match.utcDate),
-        home_score: match.score.fullTime.home,
-        away_score: match.score.fullTime.away,
+        home_score: match.score?.fullTime?.home,
+        away_score: match.score?.fullTime?.away,
         status: status,
     };
 

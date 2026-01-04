@@ -1,56 +1,65 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { mapAndUpsertFixtures } from '@/lib/api-football';
+import { NextResponse } from 'next/server';
+import { fetchFixtures, mapAndUpsertFixtures } from '@/lib/api-football';
 
-const API_URL = 'https://api.football-data.org/v4';
+// Premier League ID = 2021 (API Dokümantasyonundaki Competition ID)
+const LEAGUE_ID = "PL";
 
-const apiFetch = async (endpoint: string) => {
-  const apiKey = process.env.FOOTBALL_DATA_API_KEY;
-  if (!apiKey) {
-    throw new Error('FOOTBALL_DATA_API_KEY is not defined in .env');
-  }
+// HEDEF: Dokümantasyona göre 'season' filtresi YYYY formatında başlangıç yılını alır.
+// 2023 -> 2023/2024 Sezonu (Geçmiş Veri - AI Eğitimi İçin)
+// 2024 -> 2024/2025 Sezonu (AKTİF SEZON - Gelecek Maçlar Burada!)
+const TARGET_SEASONS = [2023, 2024];
 
-  const response = await fetch(`${API_URL}/${endpoint}`, {
-    headers: {
-      'X-Auth-Token': apiKey,
-    },
-    cache: 'no-store'
-  });
+export async function GET() { 
+    let totalProcessed = 0; 
+    let logs: string[] = [];
 
-  const data = await response.json();
-  if (!response.ok) {
-    console.error(`API call failed for endpoint: ${endpoint}. Response: ${JSON.stringify(data)}`);
-    const errorMessage = data.message || `API call failed for endpoint: ${endpoint}`;
-    throw new Error(errorMessage);
-  }
+    try { 
+        console.log(`🚀 Toplu Veri Çekme İşlemi Başlatılıyor... (${new Date().toISOString()})`);
 
-  return data;
-};
+        // Her bir sezon için döngüye giriyoruz
+        for (const season of TARGET_SEASONS) {
+            console.log(`\n--- Sezon ${season} taranıyor ---`);
+            
+            try {
+                // API Dokümantasyonu Referansı: /v4/competitions/{id}/matches?season={YEAR}
+                const fixturesResponse = await fetchFixtures(LEAGUE_ID, season);
+                
+                if (!fixturesResponse || !fixturesResponse.matches || fixturesResponse.matches.length === 0) {
+                    console.warn(`⚠️ Sezon ${season} için veri bulunamadı.`);
+                    logs.push(`Sezon ${season}: Veri yok`);
+                    continue;
+                }
+                
+                console.log(`📦 Sezon ${season}: ${fixturesResponse.matches.length} maç bulundu. Veritabanına yazılıyor...`);
+                
+                // Veritabanına kaydet (Upsert işlemi)
+                const count = await mapAndUpsertFixtures(fixturesResponse);
+                
+                console.log(`✅ Sezon ${season}: ${count} maç işlendi.`);
+                totalProcessed += count;
+                logs.push(`Sezon ${season}: ${count} maç`);
 
+            } catch (seasonError: any) {
+                console.error(`❌ Sezon ${season} hatası:`, seasonError.message);
+                logs.push(`Sezon ${season} HATA: ${seasonError.message}`);
+            }
+        }
+        
+        // İşlem bitti
+        console.log(`\n🎉 TÜM İŞLEMLER TAMAMLANDI. Toplam ${totalProcessed} maç veritabanında.`);
+        
+        return NextResponse.json({ 
+            message: 'Full Ingestion Complete', 
+            totalProcessed,
+            details: logs,
+            currentDate: new Date().toISOString()
+        });
 
-export async function GET(request: NextRequest) {
-  try {
-    // KULLANICININ HESABINDA AKTİF OLAN TÜM LİGLER
-    // PL, PD, SA, BL1, FL1, CL, DED, PPL, ELC, BSA
-    const competitions = "PL,PD,SA,BL1,FL1,CL,DED,PPL,ELC,BSA";
-      
-    console.log(`Fetching fixtures for competitions: ${competitions}`);
-    // Not: dateFrom ve dateTo kaldırıldı, böylece API mevcut sezon için yaklaşan maçları döndürür.
-    const fixturesResponse = await apiFetch(`matches?competitions=${competitions}`);
-
-    if (!fixturesResponse || !fixturesResponse.matches || fixturesResponse.matches.length === 0) {
-      return NextResponse.json({ message: `No fixtures found for competitions ${competitions}.`, processed: 0, matches: [] });
-    }
-    
-    // Fetch edilen veriyi veritabanına işle
-    const processedCount = await mapAndUpsertFixtures(fixturesResponse);
-
-    return NextResponse.json({ message: 'Ingestion complete', processed: processedCount, matches: fixturesResponse.matches });
-
-  } catch (error: any) {
-    console.error('Ingestion failed:', error);
-    return NextResponse.json(
-      { error: error.message || 'An unexpected error occurred during ingestion.' },
-      { status: 500 }
-    );
-  }
+    } catch (error: any) { 
+        console.error('❌ GENEL HATA:', error); 
+        return NextResponse.json(
+            { error: error.message || 'Beklenmeyen bir hata oluştu.' }, 
+            { status: 500 } 
+        ); 
+    } 
 }
