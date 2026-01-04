@@ -8,9 +8,10 @@ import { fetchFixtures, mapAndUpsertFixtures, analyzeMatches } from "@/lib/api-f
 import { revalidatePath } from "next/cache";
 import type { MatchWithTeams } from "@/lib/types";
 
-// Using competition codes as per API documentation
+// API'nin desteklediği lig kodları.
 const TARGET_LEAGUES = ['PL', 'PD', 'SA', 'BL1', 'FL1'];
-// Let's try the most recent complete season first as it's more likely to have data.
+// En güncel veriyi bulmak için denenecek sezonlar (önce en yeni).
+// 2025 gibi gelecekteki sezonlar henüz veri içermeyecektir.
 const TARGET_SEASONS = [2024, 2023]; 
 
 export async function getMatchesWithTeams() {
@@ -46,11 +47,11 @@ export async function getAnalyzedUpcomingMatches() {
 
 export async function refreshAndAnalyzeMatches() {
     console.log('🚀🚀🚀 refreshAndAnalyzeMatches BAŞLADI');
-    console.log('🔑 API Key exists (from env):', !!process.env.FOOTBALL_DATA_API_KEY);
+    console.log('🔑 API Key (hardcoded) var mı?', !!'a938377027ec4af3bba0ae5a3ba19064');
     let totalProcessed = 0;
     let logs: string[] = [];
 
-    console.log(`🚀 Server Action: Batch data fetching process started...`);
+    console.log(`[ACTION] Veri çekme işlemi başlıyor...`);
 
     for (const leagueCode of TARGET_LEAGUES) {
         let foundDataForLeague = false;
@@ -58,49 +59,49 @@ export async function refreshAndAnalyzeMatches() {
             if (foundDataForLeague) continue;
             
             try {
-                console.log(`--- [ACTION] Scanning ${leagueCode} for season ${season} ---`);
+                console.log(`--- [ACTION] Taranıyor: Lig ${leagueCode}, Sezon ${season} ---`);
                 const fixturesResponse = await fetchFixtures(leagueCode, season);
                 
                 if (!fixturesResponse || !fixturesResponse.matches || fixturesResponse.matches.length === 0) {
-                    logs.push(`${leagueCode} Season ${season}: No data found.`);
-                    console.warn(`⚠️ [ACTION] ${leagueCode} Season ${season}: No data found. Trying next...`);
+                    logs.push(`${leagueCode} Sezon ${season}: Veri bulunamadı.`);
+                    console.warn(`⚠️ [ACTION] ${leagueCode} Sezon ${season}: Veri bulunamadı. Sonraki sezon deneniyor...`);
                     continue;
                 }
                 
                 foundDataForLeague = true;
-                console.log(`[ACTION] Found ${fixturesResponse.matches.length} matches for ${leagueCode} season ${season}. Processing...`);
+                console.log(`[ACTION] ${fixturesResponse.matches.length} maç bulundu: Lig ${leagueCode}, Sezon ${season}. İşleniyor...`);
                 const count = await mapAndUpsertFixtures(fixturesResponse);
                 totalProcessed += count;
-                logs.push(`${leagueCode} Season ${season}: ${count} matches processed.`);
-                console.log(`✅ [ACTION] ${leagueCode} Season ${season}: ${count} matches processed.`);
+                logs.push(`${leagueCode} Sezon ${season}: ${count} maç işlendi.`);
+                console.log(`✅ [ACTION] ${leagueCode} Sezon ${season}: ${count} maç işlendi.`);
 
             } catch (seasonError: any)
             {
-                console.error(`❌ [ACTION] ${leagueCode} Season ${season} error:`, seasonError.message);
-                logs.push(`${leagueCode} Season ${season} ERROR: ${seasonError.message}`);
+                console.error(`❌ [ACTION] Hata: Lig ${leagueCode}, Sezon ${season}. Hata Mesajı:`, seasonError.message);
+                logs.push(`${leagueCode} Sezon ${season} HATA: ${seasonError.message}`);
             }
         }
     }
     
-    console.log(`🎉 [ACTION] Fixtures update complete. Total ${totalProcessed} matches ingested from API.`);
+    console.log(`🎉 [ACTION] Fikstür güncellemesi tamamlandı. Toplam ${totalProcessed} maç API'den çekildi.`);
 
     let analyzedCount = 0;
     try {
-        console.log("[ACTION] Starting analysis phase...");
+        console.log("[ACTION] Analiz aşaması başlıyor...");
         analyzedCount = await analyzeMatches();
-        console.log(`🔬 [ACTION] Analysis complete. ${analyzedCount} new matches were analyzed.`);
+        console.log(`🔬 [ACTION] Analiz tamamlandı. ${analyzedCount} yeni maç analiz edildi.`);
     } catch (analysisError: any) {
-        console.error('❌ [ACTION] Analysis phase failed:', analysisError.message);
-        return { success: false, message: `Fixture refresh complete, but analysis failed: ${analysisError.message}` };
+        console.error('❌ [ACTION] Analiz aşaması başarısız:', analysisError.message);
+        return { success: false, message: `Fikstür yenileme tamamlandı, ancak analiz başarısız oldu: ${analysisError.message}` };
     }
     
-    console.log('✅ [ACTION] Full process complete.');
+    console.log('✅ [ACTION] Tüm işlemler tamamlandı.');
     
     revalidatePath("/match-center");
     revalidatePath("/dashboard");
 
     return { 
         success: true, 
-        message: `${totalProcessed} matches ingested from API. ${analyzedCount} new matches were analyzed.` 
+        message: `${totalProcessed} maç API'den çekildi. ${analyzedCount} yeni maç analiz edildi.` 
     };
 }
