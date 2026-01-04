@@ -16,7 +16,7 @@ const apiFetch = async (endpoint: string) => {
     headers: {
       'X-Auth-Token': apiKey,
     },
-    next: { revalidate: 3600 } // Revalidate hourly
+    cache: 'no-store' // Do not cache API responses
   });
 
   const data = await response.json();
@@ -69,15 +69,15 @@ async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueId: number):
 }
 
 export async function mapAndUpsertFixtures(fixturesResponse: any) {
-    const { matches } = fixturesResponse;
+    const { matches: fixtures } = fixturesResponse;
 
-    if (!matches) {
+    if (!fixtures) {
         console.warn("mapAndUpsertFixtures received a response with no 'matches' array.");
         return 0;
     }
 
     let count = 0;
-    for (const match of matches) {
+    for (const match of fixtures) {
         if (!match.competition?.id || !match.competition?.name || !match.competition?.area?.name) {
             console.warn(`Skipping match ${match.id} due to missing competition data.`);
             continue;

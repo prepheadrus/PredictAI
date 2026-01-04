@@ -10,7 +10,9 @@ import type { MatchWithTeams } from "@/lib/types";
 
 // Using competition codes as per API documentation
 const TARGET_LEAGUES = ['PL', 'PD', 'SA', 'BL1', 'FL1'];
-const TARGET_SEASONS = [2025, 2024]; // Try current season first, then fallback to previous
+// We're in Jan 2026, so 2025 is current, 2024 is the most recent complete season.
+// Let's try the most recent complete season first as it's more likely to have data.
+const TARGET_SEASONS = [2024, 2023]; 
 
 export async function getMatchesWithTeams() {
   const result = await db.query.matches.findMany({
