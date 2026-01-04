@@ -7,7 +7,7 @@ import type { MatchWithTeams } from './types';
 const API_URL = 'https://api.football-data.org/v4';
 
 // This function is now flexible and accepts the competition code as per the documentation
-export async function fetchFixtures(competitionCode: string | number, season: number) {
+export async function fetchFixtures(competitionCode: string, season: number) {
   // DIAGNOSTIC STEP: Hardcode the API key to bypass any .env loading issues.
   const apiKey = 'a938377027ec4af3bba0ae5a3ba19064';
   console.log('🔍 fetchFixtures ÇAĞRILDI:', { competitionCode, season });
@@ -88,18 +88,18 @@ export async function mapAndUpsertFixtures(fixturesResponse: any) {
 
     let count = 0;
     for (const match of fixtures) {
-        if (!match.competition?.id || !match.competition?.name || !match.competition?.area?.name) {
-            console.warn(`[DB] Skipping match ${match.id} due to missing competition data.`);
+        if (!match.competition?.id || !match.competition?.name || !match.area?.name) {
+            console.warn(`[DB] Skipping match ${match.id} due to missing competition or area data.`);
             continue;
         }
-        await processMatch(match, match.competition);
+        await processMatch(match);
         count++;
     }
     console.log('✅ Toplam işlenen maç:', count);
     return count;
 }
 
-async function processMatch(match: any, competition: any) {
+async function processMatch(match: any) {
     console.log('🎯 processMatch başladı - Match ID:', match.id);
     if (!match.homeTeam?.id || !match.awayTeam?.id || !match.homeTeam?.name || !match.awayTeam?.name) {
         console.warn(`⚠️ Skipping match ${match.id} due to missing team data.`);
@@ -109,13 +109,13 @@ async function processMatch(match: any, competition: any) {
 
     await db.insert(schema.leagues)
       .values({
-          id: competition.id,
-          name: competition.name,
-          country: competition.area.name,
+          id: match.competition.id,
+          name: match.competition.name,
+          country: match.area.name,
       })
       .onConflictDoNothing();
 
-    const { homeTeamId, awayTeamId } = await getTeamIds(match.homeTeam, match.awayTeam, competition.id);
+    const { homeTeamId, awayTeamId } = await getTeamIds(match.homeTeam, match.awayTeam, match.competition.id);
     
     let status;
     switch (match.status) {
