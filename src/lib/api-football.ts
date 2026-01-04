@@ -9,28 +9,34 @@ const API_URL = 'https://api.football-data.org/v4';
 // This function is now flexible and accepts the competition code as per the documentation
 export async function fetchFixtures(competitionCode: string, season: number) {
   const apiKey = process.env.FOOTBALL_DATA_API_KEY;
-  if (!apiKey) {
+  if (!apiKey || apiKey === 'your_actual_api_key_here') {
+    console.error('API anahtarı eksik veya ayarlanmamış. Lütfen .env dosyasını kontrol edin.');
     throw new Error('FOOTBALL_DATA_API_KEY is not defined in .env');
   }
 
   const endpoint = `competitions/${competitionCode}/matches?season=${season}`;
-  console.log(`Fetching from API: ${API_URL}/${endpoint}`);
+  const requestUrl = `${API_URL}/${endpoint}`;
+  console.log(`[API] Fetching from API: ${requestUrl}`);
 
-  const response = await fetch(`${API_URL}/${endpoint}`, {
+  const response = await fetch(requestUrl, {
     headers: {
       'X-Auth-Token': apiKey,
     },
-    // Removing all caching strategies to ensure fresh data is always fetched.
-    // This is a key part of the fix.
     cache: 'no-store'
   });
 
   const data = await response.json();
+  
   if (!response.ok) {
-    console.error(`API call failed for endpoint: ${endpoint}. Status: ${response.status}. Response: ${JSON.stringify(data)}`);
+    console.error(`[API] API call failed for endpoint: ${endpoint}. Status: ${response.status}.`);
+    console.error(`[API] Response: ${JSON.stringify(data)}`);
     const errorMessage = data.message || `API call failed for endpoint: ${endpoint}`;
     throw new Error(errorMessage);
   }
+  
+  console.log(`[API] Successfully fetched data for ${competitionCode} season ${season}. Found ${data.matches?.length || 0} matches.`);
+  console.log(`[API] Raw data received:`, JSON.stringify(data, null, 2));
+
 
   return data;
 };
@@ -71,14 +77,14 @@ export async function mapAndUpsertFixtures(fixturesResponse: any) {
     const fixtures = fixturesResponse.matches;
 
     if (!fixtures || !Array.isArray(fixtures)) {
-        console.warn("mapAndUpsertFixtures received a response with no 'matches' array or it's not an array.");
+        console.warn("[DB] mapAndUpsertFixtures received a response with no 'matches' array or it's not an array.");
         return 0;
     }
 
     let count = 0;
     for (const match of fixtures) {
         if (!match.competition?.id || !match.competition?.name || !match.competition?.area?.name) {
-            console.warn(`Skipping match ${match.id} due to missing competition data.`);
+            console.warn(`[DB] Skipping match ${match.id} due to missing competition data.`);
             continue;
         }
         await processMatch(match, match.competition);
@@ -89,7 +95,7 @@ export async function mapAndUpsertFixtures(fixturesResponse: any) {
 
 async function processMatch(match: any, competition: any) {
     if (!match.homeTeam?.id || !match.awayTeam?.id || !match.homeTeam?.name || !match.awayTeam?.name) {
-        console.warn(`Skipping match ${match.id} due to missing team data.`);
+        console.warn(`[DB] Skipping match ${match.id} due to missing team data.`);
         return;
     }
 
@@ -150,15 +156,15 @@ export async function analyzeMatches() {
     });
 
     if (matchesToAnalyze.length === 0) {
-        console.log("No new matches to analyze.");
+        console.log("[ANALYSIS] No new matches to analyze.");
         return 0; 
     }
     
-    console.log(`Found ${matchesToAnalyze.length} matches to analyze.`);
+    console.log(`[ANALYSIS] Found ${matchesToAnalyze.length} matches to analyze.`);
 
     for (const match of matchesToAnalyze) {
         if (!match.homeTeam || !match.awayTeam) {
-            console.warn(`Skipping analysis for match ID ${match.id} due to missing team data.`);
+            console.warn(`[ANALYSIS] Skipping analysis for match ID ${match.id} due to missing team data.`);
             continue;
         }
 
@@ -197,5 +203,3 @@ export async function analyzeMatches() {
     
     return matchesToAnalyze.length;
 }
-
-    

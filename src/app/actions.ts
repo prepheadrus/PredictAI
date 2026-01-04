@@ -51,41 +51,43 @@ export async function refreshAndAnalyzeMatches() {
             if (foundDataForLeague) continue;
             
             try {
-                console.log(`--- Scanning ${leagueCode} for season ${season} ---`);
+                console.log(`--- [ACTION] Scanning ${leagueCode} for season ${season} ---`);
                 const fixturesResponse = await fetchFixtures(leagueCode, season);
                 
                 if (!fixturesResponse || !fixturesResponse.matches || fixturesResponse.matches.length === 0) {
                     logs.push(`${leagueCode} Season ${season}: No data found.`);
-                    console.warn(`⚠️ ${leagueCode} Season ${season}: No data found. Trying next...`);
+                    console.warn(`⚠️ [ACTION] ${leagueCode} Season ${season}: No data found. Trying next...`);
                     continue;
                 }
                 
                 foundDataForLeague = true;
+                console.log(`[ACTION] Found ${fixturesResponse.matches.length} matches for ${leagueCode} season ${season}. Processing...`);
                 const count = await mapAndUpsertFixtures(fixturesResponse);
                 totalProcessed += count;
                 logs.push(`${leagueCode} Season ${season}: ${count} matches processed.`);
-                console.log(`✅ ${leagueCode} Season ${season}: ${count} matches processed.`);
+                console.log(`✅ [ACTION] ${leagueCode} Season ${season}: ${count} matches processed.`);
 
             } catch (seasonError: any)
             {
-                console.error(`❌ ${leagueCode} Season ${season} error:`, seasonError.message);
+                console.error(`❌ [ACTION] ${leagueCode} Season ${season} error:`, seasonError.message);
                 logs.push(`${leagueCode} Season ${season} ERROR: ${seasonError.message}`);
             }
         }
     }
     
-    console.log(`🎉 Fixtures update complete. Total ${totalProcessed} matches ingested from API.`);
+    console.log(`🎉 [ACTION] Fixtures update complete. Total ${totalProcessed} matches ingested from API.`);
 
     let analyzedCount = 0;
     try {
+        console.log(`[ACTION] Starting analysis phase...`);
         analyzedCount = await analyzeMatches();
-        console.log(`🔬 Analysis complete. ${analyzedCount} new matches were analyzed.`);
+        console.log(`🔬 [ACTION] Analysis complete. ${analyzedCount} new matches were analyzed.`);
     } catch (analysisError: any) {
-        console.error('❌ Analysis phase failed:', analysisError.message);
+        console.error('❌ [ACTION] Analysis phase failed:', analysisError.message);
         return { success: false, message: `Fixture refresh complete, but analysis failed: ${analysisError.message}` };
     }
     
-    console.log('✅ Full process complete.');
+    console.log('✅ [ACTION] Full process complete.');
     
     revalidatePath("/match-center");
     revalidatePath("/dashboard");
@@ -95,5 +97,3 @@ export async function refreshAndAnalyzeMatches() {
         message: `${totalProcessed} matches ingested from API. ${analyzedCount} new matches were analyzed.` 
     };
 }
-
-    
