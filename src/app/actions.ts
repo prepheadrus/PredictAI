@@ -15,11 +15,12 @@ export async function getMatchesWithTeams() {
   console.log('🔍 getMatchesWithTeams ÇAĞRILDI');
      
   const result = await db.query.matches.findMany({
+    where: not(eq(matches.status, 'FT')), // Sadece bitmemiş maçları al
     with: {
         homeTeam: true,
         awayTeam: true
     },
-    orderBy: [desc(matches.match_date)]
+    orderBy: [asc(matches.match_date)] // En yakın tarihli maç en üstte olacak şekilde sırala
   });
   
   console.log('📊 Bulunan maç sayısı:', result.length);
@@ -44,7 +45,6 @@ export async function getAnalyzedUpcomingMatches() {
 
 export async function refreshAndAnalyzeMatches() {
     console.log('🚀🚀🚀 refreshAndAnalyzeMatches BAŞLADI');
-    console.log('🔑 API Key (hardcoded) var mı?', !!'a938377027ec4af3bba0ae5a3ba19064');
     let totalProcessed = 0;
     let logs: string[] = [];
 
