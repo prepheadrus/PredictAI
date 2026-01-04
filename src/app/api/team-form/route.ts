@@ -3,7 +3,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 const API_URL = 'https://api.football-data.org/v4';
-const FOOTBALL_API_KEY = process.env.FOOTBALL_DATA_API_KEY;
+// DIAGNOSTIC STEP: Hardcode the API key to ensure it's available in this route.
+const FOOTBALL_API_KEY = 'a938377027ec4af3bba0ae5a3ba19064';
 
 interface FormResult {
   result: "W" | "D" | "L";
