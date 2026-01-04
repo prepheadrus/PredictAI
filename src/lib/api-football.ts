@@ -1,7 +1,7 @@
 
 import { db } from '@/db';
 import * as schema from '@/db/schema';
-import { eq, isNull, and } from 'drizzle-orm';
+import { eq, isNull, and, sql } from 'drizzle-orm';
 
 const API_URL = 'https://api.football-data.org/v4';
 
@@ -153,18 +153,28 @@ async function processMatch(match: any, competition: any) {
 
 
 export async function analyzeMatches() {
-    const matchesToAnalyze = await db.select().from(schema.matches).where(
-        and(
+    const matchesToAnalyze = await db.query.matches.findMany({
+        where: and(
             eq(schema.matches.status, 'NS'),
             isNull(schema.matches.confidence)
-        )
-    );
+        ),
+         with: {
+            homeTeam: true,
+            awayTeam: true
+        }
+    });
 
     if (matchesToAnalyze.length === 0) {
         return 0; // No new matches to analyze
     }
 
     for (const match of matchesToAnalyze) {
+        // Basic check to ensure teams data is present
+        if (!match.homeTeam || !match.awayTeam) {
+            console.warn(`Skipping analysis for match ID ${match.id} due to missing team data.`);
+            continue;
+        }
+
         const home_win_prob = Math.random() * (50 - 30) + 30; // 30-50%
         const away_win_prob = Math.random() * (50 - 30) + 30; // 30-50%
         const draw_prob = 100 - home_win_prob - away_win_prob;
