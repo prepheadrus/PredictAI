@@ -4,6 +4,7 @@ import random
 import json
 import requests
 import sys
+import traceback
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -12,14 +13,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
 def setup_driver():
-    """Sets up the Selenium WebDriver for a headless environment."""
+    """Sets up the Selenium WebDriver for a visible, debug-friendly environment."""
     options = webdriver.ChromeOptions()
-    
-    # --- Headless & Server Environment Settings ---
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1920,1080")
     
     # --- Anti-Detection Measures ---
     options.add_argument("--disable-blink-features=AutomationControlled")
@@ -27,6 +22,8 @@ def setup_driver():
     options.add_experimental_option('useAutomationExtension', False)
     # Set a common user agent
     options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36')
+
+    # REMOVED for local debugging: --headless=new, --no-sandbox, --disable-dev-shm-usage
 
     try:
         driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
@@ -47,10 +44,10 @@ def scrape_odds_portal(driver, url):
     print(f"Navigating to {url}...")
     driver.get(url)
     
-    # Wait for the main content to be somewhat loaded
-    initial_wait = random.uniform(5, 8)
-    print(f"Waiting for {initial_wait:.2f} seconds for initial page load...")
-    time.sleep(initial_wait)
+    # Increased wait time for manual CAPTCHA solving
+    wait_time = 15
+    print(f"Waiting for {wait_time} seconds for potential manual intervention (e.g., CAPTCHA)...")
+    time.sleep(wait_time)
     
     scraped_matches = []
     
@@ -95,14 +92,23 @@ def scrape_odds_portal(driver, url):
                     scraped_matches.append(match_data)
                     print(f"  -> Scraped: {home_team} vs {away_team} | Odds: {home_odd}, {draw_odd}, {away_odd}")
 
-            except Exception as e:
+            except Exception:
                 # Prevents one bad row from stopping the whole script
                 continue
                 
     except Exception as e:
         print(f"An error occurred during scraping: {e}")
-        driver.save_screenshot('error.png')
-        print("Screenshot 'error.png' saved.")
+        print("--- TRACEBACK ---")
+        traceback.print_exc()
+        print("-----------------")
+        try:
+            driver.save_screenshot('error_debug.png')
+            print("Screenshot 'error_debug.png' saved.")
+            with open('debug.html', 'w', encoding='utf-8') as f:
+                f.write(driver.page_source)
+            print("Page source 'debug.html' saved for analysis.")
+        except Exception as save_e:
+            print(f"Could not save debug files: {save_e}")
         
     return scraped_matches
 
@@ -132,17 +138,33 @@ def send_data_to_api(data, api_url):
 if __name__ == "__main__":
     TARGET_URL = "https://www.oddsportal.com/football/england/premier-league/"
     # In Google IDX, the Next.js dev server typically runs on port 3000
-    API_ENDPOINT = "http://localhost:3000/api/update-odds" 
+    # Make sure this port matches your local dev server port
+    API_ENDPOINT = "http://localhost:9002/api/update-odds" 
     
-    driver = setup_driver()
-    
+    driver = None
     try:
+        driver = setup_driver()
         scraped_data = scrape_odds_portal(driver, TARGET_URL)
-        if scraped_data:
-            send_data_to_api(scraped_data, API_ENDPOINT)
-        else:
+        
+        if not scraped_data:
             print("\nNo matches were scraped. The website structure might have changed or there are no upcoming matches.")
+            try:
+                with open('debug.html', 'w', encoding='utf-8') as f:
+                    f.write(driver.page_source)
+                print("Page source 'debug.html' saved for analysis as no matches were found.")
+            except Exception as save_e:
+                 print(f"Could not save debug.html file: {save_e}")
+        else:
+             send_data_to_api(scraped_data, API_ENDPOINT)
+
+    except Exception as main_e:
+        print(f"\nA critical error occurred in the main execution block: {main_e}")
+        traceback.print_exc()
+
     finally:
-        print("\nClosing browser.")
-        driver.quit()
+        if driver:
+            print("\nClosing browser.")
+            driver.quit()
         print("Script finished.")
+
+    
