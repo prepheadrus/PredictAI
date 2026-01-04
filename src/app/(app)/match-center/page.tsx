@@ -4,9 +4,17 @@ import { MatchList } from "@/components/match-center/match-list";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ListCollapse } from "lucide-react";
 import { getMatchesWithTeams } from "@/app/actions";
+import { analyzeMatches } from "@/lib/api-football";
+import { revalidatePath } from "next/cache";
 
 
 export default async function MatchCenterPage() {
+    // Run analysis on any matches that might be pending
+    const analyzedCount = await analyzeMatches();
+    if (analyzedCount > 0) {
+        revalidatePath("/match-center"); // Revalidate if we just analyzed something
+    }
+    
     const initialMatches = await getMatchesWithTeams();
 
     return (
@@ -22,7 +30,7 @@ export default async function MatchCenterPage() {
                         Match History
                     </CardTitle>
                     <CardDescription>
-                        A log of all ingested matches from the API.
+                        A log of all ingested matches from the API. {analyzedCount > 0 && `(${analyzedCount} new matches analyzed)`}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
