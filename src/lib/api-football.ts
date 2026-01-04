@@ -6,39 +6,38 @@ import type { MatchWithTeams } from './types';
 
 const API_URL = 'https://api.football-data.org/v4';
 
-const apiFetch = async (endpoint: string) => {
+// This function is now flexible and accepts the competition code as per the documentation
+export async function fetchFixtures(competitionCode: string, season: number) {
   const apiKey = process.env.FOOTBALL_DATA_API_KEY;
   if (!apiKey) {
     throw new Error('FOOTBALL_DATA_API_KEY is not defined in .env');
   }
 
+  const endpoint = `competitions/${competitionCode}/matches?season=${season}`;
+  console.log(`Fetching from API: ${API_URL}/${endpoint}`);
+
   const response = await fetch(`${API_URL}/${endpoint}`, {
     headers: {
       'X-Auth-Token': apiKey,
     },
-    cache: 'no-store' // Do not cache API responses
+    // Removing all caching strategies to ensure fresh data is always fetched.
+    // This is a key part of the fix.
+    cache: 'no-store'
   });
 
   const data = await response.json();
   if (!response.ok) {
-    console.error(`API call failed for endpoint: ${endpoint}. Response: ${JSON.stringify(data)}`);
+    console.error(`API call failed for endpoint: ${endpoint}. Status: ${response.status}. Response: ${JSON.stringify(data)}`);
     const errorMessage = data.message || `API call failed for endpoint: ${endpoint}`;
-    const detailedError = data.error ? JSON.stringify(data.error) : (data.errors ? JSON.stringify(data.errors) : '');
-    throw new Error(`${errorMessage} ${detailedError}`);
+    throw new Error(errorMessage);
   }
 
   return data;
 };
 
-// This function is now flexible and accepts the competition code as per the documentation
-export async function fetchFixtures(competitionCode: string, season: number) {
-  return apiFetch(`competitions/${competitionCode}/matches?season=${season}`);
-}
-
 
 // Helper to find or create teams and return their DB IDs
 async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueId: number): Promise<{ homeTeamId: number, awayTeamId: number }> {
-    
     // Upsert Home Team
     await db.insert(schema.teams)
         .values({
@@ -69,10 +68,10 @@ async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueId: number):
 }
 
 export async function mapAndUpsertFixtures(fixturesResponse: any) {
-    const { matches: fixtures } = fixturesResponse;
+    const fixtures = fixturesResponse.matches;
 
-    if (!fixtures) {
-        console.warn("mapAndUpsertFixtures received a response with no 'matches' array.");
+    if (!fixtures || !Array.isArray(fixtures)) {
+        console.warn("mapAndUpsertFixtures received a response with no 'matches' array or it's not an array.");
         return 0;
     }
 
@@ -89,13 +88,11 @@ export async function mapAndUpsertFixtures(fixturesResponse: any) {
 }
 
 async function processMatch(match: any, competition: any) {
-    // Skip if team data is incomplete
     if (!match.homeTeam?.id || !match.awayTeam?.id || !match.homeTeam?.name || !match.awayTeam?.name) {
         console.warn(`Skipping match ${match.id} due to missing team data.`);
         return;
     }
 
-    // Upsert the league for this specific match just in case
     await db.insert(schema.leagues)
       .values({
           id: competition.id,
@@ -104,29 +101,16 @@ async function processMatch(match: any, competition: any) {
       })
       .onConflictDoNothing();
 
-
     const { homeTeamId, awayTeamId } = await getTeamIds(match.homeTeam, match.awayTeam, competition.id);
     
     let status;
     switch (match.status) {
-        case 'FINISHED':
-            status = 'FT';
-            break;
-        case 'SCHEDULED':
-        case 'TIMED':
-            status = 'NS';
-            break;
-        case 'IN_PLAY':
-            status = 'LIVE';
-            break;
-         case 'PAUSED':
-            status = 'HT';
-            break;
-        case 'POSTPONED':
-            status = 'PST';
-            break;
-        default:
-            status = match.status;
+        case 'FINISHED': status = 'FT'; break;
+        case 'SCHEDULED': case 'TIMED': status = 'NS'; break;
+        case 'IN_PLAY': status = 'LIVE'; break;
+        case 'PAUSED': status = 'HT'; break;
+        case 'POSTPONED': status = 'PST'; break;
+        default: status = match.status;
     }
 
     const matchData = {
@@ -166,21 +150,22 @@ export async function analyzeMatches() {
     });
 
     if (matchesToAnalyze.length === 0) {
-        return 0; // No new matches to analyze
+        console.log("No new matches to analyze.");
+        return 0; 
     }
+    
+    console.log(`Found ${matchesToAnalyze.length} matches to analyze.`);
 
     for (const match of matchesToAnalyze) {
-        // Basic check to ensure teams data is present
         if (!match.homeTeam || !match.awayTeam) {
             console.warn(`Skipping analysis for match ID ${match.id} due to missing team data.`);
             continue;
         }
 
-        const home_win_prob = Math.random() * (50 - 30) + 30; // 30-50%
-        let away_win_prob = Math.random() * (40 - 20) + 20; // 20-40%
+        const home_win_prob = Math.random() * (50 - 30) + 30;
+        let away_win_prob = Math.random() * (40 - 20) + 20;
         let draw_prob = 100 - home_win_prob - away_win_prob;
 
-        // Normalize probabilities
         if (draw_prob < 10) {
             away_win_prob -= (10 - draw_prob)
             draw_prob = 10;
@@ -190,8 +175,7 @@ export async function analyzeMatches() {
         const final_away_prob = (away_win_prob/total_prob) * 100;
         const final_draw_prob = (draw_prob/total_prob) * 100;
 
-
-        const confidence = Math.random() * (90 - 60) + 60; // 60-90%
+        const confidence = Math.random() * (90 - 60) + 60;
 
         let predicted_score = "1-1";
         if (final_home_prob > final_away_prob + 10) {
@@ -214,16 +198,4 @@ export async function analyzeMatches() {
     return matchesToAnalyze.length;
 }
 
-export async function getMatchesToAnalyze(): Promise<MatchWithTeams[]> {
-    return db.query.matches.findMany({
-      where: and(
-        eq(schema.matches.status, 'NS'),
-        isNull(schema.matches.confidence)
-      ),
-      with: {
-        homeTeam: true,
-        awayTeam: true,
-      },
-      orderBy: [asc(schema.matches.match_date)],
-    });
-}
+    

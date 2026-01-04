@@ -10,7 +10,6 @@ import type { MatchWithTeams } from "@/lib/types";
 
 // Using competition codes as per API documentation
 const TARGET_LEAGUES = ['PL', 'PD', 'SA', 'BL1', 'FL1'];
-// We're in Jan 2026, so 2025 is current, 2024 is the most recent complete season.
 // Let's try the most recent complete season first as it's more likely to have data.
 const TARGET_SEASONS = [2024, 2023]; 
 
@@ -96,3 +95,5 @@ export async function refreshAndAnalyzeMatches() {
         message: `${totalProcessed} matches ingested from API. ${analyzedCount} new matches were analyzed.` 
     };
 }
+
+    
