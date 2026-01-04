@@ -3,13 +3,13 @@ import Database from 'better-sqlite3';
 import * as schema from './schema';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
-const dbPath = 'bahis.db';
+const dbPath = process.env.NODE_ENV === 'development' ? 'bahis.db' : './bahis.db';
 const sqlite = new Database(dbPath, { fileMustExist: false });
 
 // Simple one-time check and creation of tables
 try {
     // Check if the main 'matches' table has the new analysis columns.
-    // If this fails, we assume the schema is old and needs to be created.
+    // If this fails, we assume the schema is old or doesn't exist.
     sqlite.prepare(`SELECT home_win_prob FROM matches LIMIT 1`).get();
 } catch (error) {
     // If the columns don't exist, we'll recreate the tables.
