@@ -67,43 +67,17 @@ async function getTeamIds(homeTeamAPI: any, awayTeamAPI: any, leagueId: number):
 }
 
 export async function mapAndUpsertFixtures(fixturesResponse: any) {
-    const { matches, competition } = fixturesResponse;
-
-    // Check if competition and area data exist
-    if (!competition || !competition.area || !competition.area.name) {
-      // If not, we might be dealing with a response with matches from multiple competitions
-      // In this case, we'll process each match's competition individually.
-      let count = 0;
-      for (const match of matches) {
-          if (!match.competition?.id || !match.competition?.name || !match.competition?.area?.name) {
-              console.warn(`Skipping match ${match.id} due to missing competition data.`);
-              continue;
-          }
-          await processMatch(match, match.competition);
-          count++;
-      }
-      return count;
-    }
-    
-    // If it's a single competition response, process as before
-    // Upsert League
-    await db.insert(schema.leagues)
-        .values({
-            id: competition.id,
-            name: competition.name,
-            country: competition.area.name,
-        })
-        .onConflictDoUpdate({
-            target: schema.leagues.id,
-            set: { name: competition.name, country: competition.area.name }
-        });
+    const { matches } = fixturesResponse;
 
     let count = 0;
     for (const match of matches) {
-        await processMatch(match, competition);
+        if (!match.competition?.id || !match.competition?.name || !match.competition?.area?.name) {
+            console.warn(`Skipping match ${match.id} due to missing competition data.`);
+            continue;
+        }
+        await processMatch(match, match.competition);
         count++;
     }
-
     return count;
 }
 
