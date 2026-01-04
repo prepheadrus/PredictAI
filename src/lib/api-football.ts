@@ -49,7 +49,12 @@ export async function fetchUpcomingFixtures(competitionCode: string) {
     throw new Error('FOOTBALL_DATA_API_KEY is not defined in .env');
   }
 
-  const endpoint = `competitions/${competitionCode}/matches?status=SCHEDULED`;
+  const toISO = (date: Date) => date.toISOString().split('T')[0];
+  const dateFrom = new Date();
+  const dateTo = new Date();
+  dateTo.setDate(dateTo.getDate() + 3);
+
+  const endpoint = `competitions/${competitionCode}/matches?dateFrom=${toISO(dateFrom)}&dateTo=${toISO(dateTo)}`;
   console.log(`Fetching upcoming from API: ${API_URL}/${endpoint}`);
 
   const response = await fetch(`${API_URL}/${endpoint}`, {
@@ -112,6 +117,7 @@ export async function mapAndUpsertFixtures(fixturesResponse: any) {
 
     let count = 0;
     for (const match of fixtures) {
+        // Updated check to look for 'area' at the top level
         if (!match.competition?.id || !match.competition?.name || !match.area?.name) {
             console.warn(`[DB] Skipping match ${match.id} due to missing competition or area data.`);
             continue;
@@ -242,3 +248,4 @@ export async function analyzeMatches() {
     
     return matchesToAnalyze.length;
 }
+
