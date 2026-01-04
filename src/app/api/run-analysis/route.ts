@@ -15,8 +15,9 @@ async function getPredictionForMatch(match: any) {
             awayTeam: match.awayTeam.name,
             homeId: match.homeTeam.id,
             awayId: match.awayTeam.id,
-            league: "Unknown League", // league name is not readily available here, but the model can fallback
+            league: "Premier League", // The primary league we are tracking
         }),
+        cache: 'no-store'
     });
 
     const result = await response.json();

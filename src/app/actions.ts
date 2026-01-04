@@ -8,7 +8,7 @@ import { fetchFixtures, mapAndUpsertFixtures } from "@/lib/api-football";
 import { revalidatePath } from "next/cache";
 
 const TARGET_LEAGUE = "PL";
-const TARGET_SEASONS = [2023, 2024];
+const TARGET_SEASONS = [2024, 2025]; // 2024 for past data, 2025 for current/upcoming
 
 export async function getMatchesWithTeams() {
   const result = await db.query.matches.findMany({
@@ -34,7 +34,7 @@ export async function getMatchesWithTeams() {
 
 export async function getAnalyzedUpcomingMatches() {
     const result = await db.query.matches.findMany({
-        where: and(not(isNull(matches.confidence))),
+        where: and(not(isNull(matches.confidence)), eq(matches.status, 'NS')),
         with: {
             homeTeam: true,
             awayTeam: true
@@ -45,53 +45,54 @@ export async function getAnalyzedUpcomingMatches() {
     return result;
 }
 
-// Fikstürü yenileyen ve veritabanına kaydeden server action
+
 export async function refreshAndAnalyzeMatches() {
     let totalProcessed = 0;
     let logs: string[] = [];
 
-    console.log(`🚀 Server Action: Toplu Veri Çekme İşlemi Başlatılıyor...`);
+    console.log(`🚀 Server Action: Batch data fetching process started...`);
 
     for (const season of TARGET_SEASONS) {
         try {
-            console.log(`--- Sezon ${season} taranıyor ---`);
+            console.log(`--- Scanning season ${season} ---`);
             const fixturesResponse = await fetchFixtures(TARGET_LEAGUE, season);
             
             if (!fixturesResponse || !fixturesResponse.matches || fixturesResponse.matches.length === 0) {
-                logs.push(`Sezon ${season}: Veri yok`);
+                logs.push(`Season ${season}: No data found.`);
                 continue;
             }
             
             const count = await mapAndUpsertFixtures(fixturesResponse);
             totalProcessed += count;
-            logs.push(`Sezon ${season}: ${count} maç`);
+            logs.push(`Season ${season}: ${count} matches processed.`);
 
         } catch (seasonError: any) {
-            console.error(`❌ Sezon ${season} hatası:`, seasonError.message);
-            logs.push(`Sezon ${season} HATA: ${seasonError.message}`);
-            return { success: false, message: `Sezon ${season} verisi çekilirken hata oluştu: ${seasonError.message}` };
+            console.error(`❌ Season ${season} error:`, seasonError.message);
+            logs.push(`Season ${season} ERROR: ${seasonError.message}`);
+            return { success: false, message: `Error fetching data for season ${season}: ${seasonError.message}` };
         }
     }
     
-    console.log(`🎉 Fikstürler tamamlandı. Toplam ${totalProcessed} maç işlendi.`);
+    console.log(`🎉 Fixtures updated. Total ${totalProcessed} matches processed.`);
 
-    // Şimdi analiz edilmemiş maçları analiz et
+    // Now, run analysis on un-analyzed matches
     const matchesToAnalyze = await db.query.matches.findMany({
-        where: isNull(matches.confidence),
+        where: and(isNull(matches.confidence), eq(matches.status, 'NS')), // Only 'Not Started' matches
         with: { homeTeam: true, awayTeam: true }
     });
 
     if (matchesToAnalyze.length === 0) {
         revalidatePath("/match-center");
-        return { success: true, message: `Fikstür yenilendi. Analiz bekleyen yeni maç bulunamadı.` };
+        revalidatePath("/dashboard");
+        return { success: true, message: `Fixture refresh complete. No new matches were pending analysis.` };
     }
 
-    console.log(`🔬 ${matchesToAnalyze.length} maç analiz edilecek...`);
+    console.log(`🔬 Analyzing ${matchesToAnalyze.length} matches...`);
 
     for (const match of matchesToAnalyze) {
         if (!match.homeTeam || !match.awayTeam) continue;
         try {
-            // Internally call the run-analysis route. In a real app, you might call the function directly.
+            // Internally call the run-analysis route.
             const host = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:9002';
             const response = await fetch(`${host}/api/run-analysis`, {
                 method: 'POST',
@@ -108,9 +109,10 @@ export async function refreshAndAnalyzeMatches() {
         }
     }
     
-    console.log('✅ Tüm analizler tamamlandı.');
+    console.log('✅ Analysis triggered for all pending matches.');
     
     revalidatePath("/match-center");
+    revalidatePath("/dashboard");
 
-    return { success: true, message: `${totalProcessed} maç işlendi ve ${matchesToAnalyze.length} maçın analizi tetiklendi.` };
+    return { success: true, message: `${totalProcessed} matches processed and analysis triggered for ${matchesToAnalyze.length} matches.` };
 }
