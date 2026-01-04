@@ -117,7 +117,6 @@ export async function mapAndUpsertFixtures(fixturesResponse: any) {
 
     let count = 0;
     for (const match of fixtures) {
-        // Updated check to look for 'area' at the top level
         if (!match.competition?.id || !match.competition?.name || !match.area?.name) {
             console.warn(`[DB] Skipping match ${match.id} due to missing competition or area data.`);
             continue;
@@ -154,6 +153,8 @@ async function processMatch(match: any) {
         case 'IN_PLAY': status = 'LIVE'; break;
         case 'PAUSED': status = 'HT'; break;
         case 'POSTPONED': status = 'PST'; break;
+        case 'SUSPENDED': status = 'SUS'; break;
+        case 'CANCELED': status = 'CANC'; break;
         default: status = match.status;
     }
 
@@ -248,4 +249,5 @@ export async function analyzeMatches() {
     
     return matchesToAnalyze.length;
 }
+
 
