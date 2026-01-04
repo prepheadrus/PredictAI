@@ -8,8 +8,18 @@ import { desc, asc, inArray, isNull, and, not } from "drizzle-orm";
 export async function getMatchesWithTeams() {
   const result = await db.query.matches.findMany({
     with: {
-        homeTeam: true,
-        awayTeam: true
+        homeTeam: {
+            columns: {
+                name: true,
+                logoUrl: true,
+            }
+        },
+        awayTeam: {
+            columns: {
+                name: true,
+                logoUrl: true,
+            }
+        }
     },
     orderBy: [desc(matches.match_date)]
   });

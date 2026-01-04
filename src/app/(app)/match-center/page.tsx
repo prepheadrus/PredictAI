@@ -3,9 +3,12 @@ import { PageHeader } from "@/components/shared/page-header";
 import { MatchList } from "@/components/match-center/match-list";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ListCollapse } from "lucide-react";
+import { getMatchesWithTeams } from "@/app/actions";
 
 
-export default function MatchCenterPage() {
+export default async function MatchCenterPage() {
+    const initialMatches = await getMatchesWithTeams();
+
     return (
         <div className="container mx-auto px-4 md:px-6">
             <PageHeader
@@ -23,7 +26,7 @@ export default function MatchCenterPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <MatchList />
+                    <MatchList initialMatches={initialMatches} />
                 </CardContent>
             </Card>
         </div>

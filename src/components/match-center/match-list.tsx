@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from "react";
@@ -37,9 +38,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 
-export function MatchList() {
-  const [data, setData] = useState<MatchWithTeams[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+export function MatchList({ initialMatches }: { initialMatches: MatchWithTeams[] }) {
+  const [data, setData] = useState<MatchWithTeams[]>(initialMatches);
+  const [isLoading, setIsLoading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState<Record<number, boolean>>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<MatchWithTeams | null>(null);
@@ -64,8 +65,8 @@ export function MatchList() {
   }, [toast]);
 
   useEffect(() => {
-      fetchAllMatches();
-  }, [fetchAllMatches]);
+      setData(initialMatches);
+  }, [initialMatches]);
 
 
   const handleRefreshAndAnalyze = async () => {
@@ -152,8 +153,8 @@ export function MatchList() {
             body: JSON.stringify({
                 homeTeam: match.homeTeam!.name,
                 awayTeam: match.awayTeam!.name,
-                homeId: match.homeTeam!.id,
-                awayId: match.awayTeam!.id,
+                homeId: match.home_team_id,
+                awayId: match.away_team_id,
                 league: "Unknown League",
             }),
         });
@@ -165,6 +166,8 @@ export function MatchList() {
          console.error("Failed to fetch full analysis", error);
          toast({ variant: "destructive", title: "Hata", description: "Analiz yorumu çekilemedi."});
     }
+
+    if (!match.home_team_id || !match.away_team_id) return;
 
     try {
         const [homeFormRes, awayFormRes] = await Promise.all([
@@ -340,8 +343,8 @@ export function MatchList() {
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {homeTeamForm && <TeamForm form={homeTeamForm} teamName={selectedMatch!.homeTeam!.name!} />}
-                            {awayTeamForm && <TeamForm form={awayTeamForm} teamName={selectedMatch!.awayTeam!.name!} />}
+                            {homeTeamForm && selectedMatch?.homeTeam?.name && <TeamForm form={homeTeamForm} teamName={selectedMatch.homeTeam.name} />}
+                            {awayTeamForm && selectedMatch?.awayTeam?.name && <TeamForm form={awayTeamForm} teamName={selectedMatch.awayTeam.name} />}
                         </div>
                     )}
                 </div>

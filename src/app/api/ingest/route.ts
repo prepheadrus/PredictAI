@@ -29,15 +29,13 @@ const apiFetch = async (endpoint: string) => {
 
 export async function GET(request: NextRequest) {
   try {
-    const today = new Date().toISOString().split('T')[0];
-    const endDate = new Date(new Date().setDate(new Date().getDate() + 3)).toISOString().split('T')[0];
-
     // KULLANICININ HESABINDA AKTİF OLAN TÜM LİGLER
     // PL, PD, SA, BL1, FL1, CL, DED, PPL, ELC, BSA
     const competitions = "PL,PD,SA,BL1,FL1,CL,DED,PPL,ELC,BSA";
       
-    console.log(`Fetching fixtures from ${today} to ${endDate} for competitions: ${competitions}`);
-    const fixturesResponse = await apiFetch(`matches?dateFrom=${today}&dateTo=${endDate}&competitions=${competitions}`);
+    console.log(`Fetching fixtures for competitions: ${competitions}`);
+    // Not: dateFrom ve dateTo kaldırıldı, böylece API mevcut sezon için yaklaşan maçları döndürür.
+    const fixturesResponse = await apiFetch(`matches?competitions=${competitions}`);
 
     if (!fixturesResponse || !fixturesResponse.matches || fixturesResponse.matches.length === 0) {
       return NextResponse.json({ message: `No fixtures found for competitions ${competitions}.`, processed: 0, matches: [] });
