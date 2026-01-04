@@ -3,7 +3,7 @@
 
 import { db } from "@/db";
 import { matches } from "@/db/schema";
-import { desc, asc, inArray, isNull, and, not } from "drizzle-orm";
+import { desc, asc, inArray, isNull, and, not, eq } from "drizzle-orm";
 import { fetchFixtures, mapAndUpsertFixtures } from "@/lib/api-football";
 import { revalidatePath } from "next/cache";
 
