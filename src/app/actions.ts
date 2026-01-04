@@ -15,8 +15,8 @@ export async function getMatchesWithTeams() {
   console.log('🔍 getMatchesWithTeams ÇAĞRILDI');
      
   const result = await db.query.matches.findMany({
-    // Sadece bitmemiş, ertelenmemiş ve iptal olmamış maçları al
-    where: not(inArray(matches.status, ['FT', 'PST', 'CANC', 'SUS'])), 
+    // Sadece bitmemiş, ertelenmemiş, iptal olmamış ve hükmen kararlaştırılmamış maçları al
+    where: not(inArray(matches.status, ['FT', 'PST', 'CANC', 'SUS', 'AWD'])), 
     with: {
         homeTeam: true,
         awayTeam: true
@@ -92,5 +92,6 @@ export async function refreshAndAnalyzeMatches() {
         message: `${totalProcessed} maç API'den çekildi. ${analyzedCount} yeni maç analiz edildi.` 
     };
 }
+
 
 

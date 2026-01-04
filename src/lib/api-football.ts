@@ -155,6 +155,7 @@ async function processMatch(match: any) {
         case 'POSTPONED': status = 'PST'; break;
         case 'SUSPENDED': status = 'SUS'; break;
         case 'CANCELED': status = 'CANC'; break;
+        case 'AWARDED': status = 'AWD'; break;
         default: status = match.status;
     }
 
@@ -249,5 +250,6 @@ export async function analyzeMatches() {
     
     return matchesToAnalyze.length;
 }
+
 
 
