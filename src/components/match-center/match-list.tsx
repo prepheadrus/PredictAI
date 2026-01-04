@@ -27,7 +27,8 @@ export function MatchList({ initialMatches }: MatchListProps) {
     if (sortBy === "date") {
       return matches.sort((a, b) => {
         if (!a.match_date || !b.match_date) return 0;
-        return new Date(b.match_date).getTime() - new Date(a.match_date).getTime();
+        // Corrected: a - b for ascending order (nearest date first)
+        return new Date(a.match_date).getTime() - new Date(b.match_date).getTime();
       });
     } else {
       return matches.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
