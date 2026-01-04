@@ -3,7 +3,7 @@
 
 import { db } from "@/db";
 import { matches } from "@/db/schema";
-import { desc, asc, inArray, isNull, and } from "drizzle-orm";
+import { desc, asc, inArray, isNull, and, not } from "drizzle-orm";
 
 export async function getMatchesWithTeams() {
   const result = await db.query.matches.findMany({
@@ -19,6 +19,7 @@ export async function getMatchesWithTeams() {
 
 export async function getAnalyzedUpcomingMatches() {
     const result = await db.query.matches.findMany({
+        where: and(not(isNull(matches.confidence))),
         with: {
             homeTeam: true,
             awayTeam: true

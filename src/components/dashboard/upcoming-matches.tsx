@@ -41,7 +41,6 @@ export function UpcomingMatches() {
     const fetchMatches = async () => {
       setIsLoading(true);
       try {
-        // Fetch only analyzed matches
         const matches = await getAnalyzedUpcomingMatches();
         setUpcoming(matches);
       } catch (error) {
