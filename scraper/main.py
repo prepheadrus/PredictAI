@@ -38,6 +38,24 @@ def setup_driver():
     
     return driver
 
+def convert_to_decimal(odd_str: str) -> float:
+    """Converts American or Decimal odds string to a decimal float."""
+    try:
+        # If it's already a decimal
+        if '.' in odd_str:
+            return float(odd_str)
+        
+        # American odds
+        odd_val = int(odd_str)
+        if odd_val > 0: # Positive odds
+            return round((odd_val / 100) + 1, 2)
+        else: # Negative odds
+            return round((100 / abs(odd_val)) + 1, 2)
+    except (ValueError, TypeError):
+        # Return a value that indicates an error, e.g., 0.0 or raise an exception
+        return 0.0
+
+
 def scrape_odds_portal(driver, url):
     """Navigates to the URL and scrapes match data by parsing page text."""
     print(f"Navigating to {url}...")
@@ -59,44 +77,36 @@ def scrape_odds_portal(driver, url):
         
         # Regex to identify time format like XX:XX
         time_regex = re.compile(r'^\d{2}:\d{2}$')
+        # Regex for both decimal (e.g., 1.23) and American odds (e.g., -110, +250)
+        odd_regex = re.compile(r'^(\d+\.\d{2}|[+-]\d+)$')
 
         i = 0
-        while i < len(lines) - 4: # Need at least 5 lines for a potential match (time, team, team, odd, odd)
+        while i < len(lines) - 4:
             # Find a line that looks like a time
             if time_regex.match(lines[i]):
                 try:
-                    # Potential match found, check subsequent lines
-                    # OddsPortal structure: Time, TeamA, -, TeamB, odd1, odd2, odd3
-                    # Sometimes there's a "-" between teams, sometimes not. We'll be flexible.
-                    
                     home_team_index = i + 1
                     
-                    # Look for the score/vs separator which is often just '-' or 'POSTP.' etc.
-                    # The team names are before this separator
                     separator_index = -1
                     for j in range(home_team_index, min(i + 5, len(lines))):
-                         # A valid separator is usually not a word and not a number.
-                         # It's often non-alphanumeric or a short non-word string.
-                         if not lines[j].replace('.', '', 1).isdigit() and not lines[j][0].isalpha() and len(lines[j]) < 5:
+                         if not lines[j].replace('.', '', 1).isdigit() and not lines[j][0].isalpha() and len(lines[j]) < 5 and lines[j] != '-':
                              separator_index = j
                              break
                     
                     if separator_index == -1:
-                        # Could not find a clear separator, maybe it's the simple format
-                        if i + 3 < len(lines) and lines[i+2] == '-': # Time, Team A, -, Team B ...
+                        if i + 3 < len(lines) and lines[i+2] == '-': 
                            home_team = lines[i+1]
                            away_team = lines[i+3]
                            odds_start_index = i + 4
-                        else: # Maybe Time, Team A, Team B...
+                        else:
                            home_team = lines[i+1]
                            away_team = lines[i+2]
                            odds_start_index = i + 3
-                    else: # A separator was found
+                    else:
                         home_team = " ".join(lines[home_team_index:separator_index])
                         away_team_index = separator_index + 1
-                        # We don't know how many lines away team name takes, but odds must be numbers
                         away_team_end_index = away_team_index
-                        while away_team_end_index < len(lines) and not lines[away_team_end_index].replace('.','',1).isdigit():
+                        while away_team_end_index < len(lines) and not odd_regex.match(lines[away_team_end_index]):
                             away_team_end_index += 1
                         
                         away_team = " ".join(lines[away_team_index:away_team_end_index])
@@ -106,32 +116,33 @@ def scrape_odds_portal(driver, url):
                         i +=1
                         continue
 
-                    # Now, get the odds
                     if odds_start_index + 2 < len(lines):
-                        home_odd = float(lines[odds_start_index])
-                        draw_odd = float(lines[odds_start_index + 1])
-                        away_odd = float(lines[odds_start_index + 2])
+                        home_odd_str = lines[odds_start_index]
+                        draw_odd_str = lines[odds_start_index + 1]
+                        away_odd_str = lines[odds_start_index + 2]
 
-                        match_data = {
-                            "homeTeam": home_team.strip(),
-                            "awayTeam": away_team.strip(),
-                            "homeOdd": home_odd,
-                            "drawOdd": draw_odd,
-                            "awayOdd": away_odd,
-                        }
-                        scraped_matches.append(match_data)
-                        print(f"  -> Scraped: {home_team} vs {away_team} | Odds: {home_odd}, {draw_odd}, {away_odd}")
-                        
-                        # Move index past this match
-                        i = odds_start_index + 3
-                        continue
+                        if odd_regex.match(home_odd_str) and odd_regex.match(draw_odd_str) and odd_regex.match(away_odd_str):
+                            home_odd = convert_to_decimal(home_odd_str)
+                            draw_odd = convert_to_decimal(draw_odd_str)
+                            away_odd = convert_to_decimal(away_odd_str)
+
+                            match_data = {
+                                "homeTeam": home_team.strip(),
+                                "awayTeam": away_team.strip(),
+                                "homeOdd": home_odd,
+                                "drawOdd": draw_odd,
+                                "awayOdd": away_odd,
+                            }
+                            scraped_matches.append(match_data)
+                            print(f"  -> Scraped: {home_team} vs {away_team} | Odds: {home_odd}, {draw_odd}, {away_odd}")
+                            
+                            i = odds_start_index + 3
+                            continue
 
                 except (ValueError, IndexError):
-                    # This block wasn't a valid match, move to the next line
                     i += 1
                     continue
             
-            # If not a match, just move to the next line
             i += 1
 
     except Exception as e:
@@ -175,8 +186,6 @@ def send_data_to_api(data, api_url):
 
 if __name__ == "__main__":
     TARGET_URL = "https://www.oddsportal.com/football/england/premier-league/"
-    # In Google IDX, the Next.js dev server typically runs on port 3000
-    # Make sure this port matches your local dev server port
     API_ENDPOINT = "http://localhost:9002/api/update-odds" 
     
     driver = None
@@ -204,7 +213,5 @@ if __name__ == "__main__":
             print("\nClosing browser.")
             driver.quit()
         print("Script finished.")
-
-    
 
     
