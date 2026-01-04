@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useMemo, useEffect, useCallback, useTransition } from "react";
@@ -49,10 +48,13 @@ export function MatchList({ initialMatches }: { initialMatches: MatchWithTeams[]
         const result = await refreshAndAnalyzeMatches();
         if (result.success) {
             toast({ title: "İşlem Tamamlandı!", description: result.message });
+            // The page will be revalidated by the server action, which will update the `initialMatches` prop
+            // For a more immediate client-side update, we can re-fetch or simply let revalidation handle it.
+            // A full page reload is a simple but less optimal solution.
+            window.location.reload(); 
         } else {
             toast({ variant: "destructive", title: "İşlem Başarısız", description: result.message });
         }
-        // The page will be revalidated by the server action, which will update the `initialMatches` prop
     });
   };
   
