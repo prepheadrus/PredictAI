@@ -14,6 +14,8 @@ const TARGET_LEAGUES = ['PL', 'PD', 'SA', 'BL1', 'FL1'];
 const TARGET_SEASONS = [2024, 2023]; 
 
 export async function getMatchesWithTeams() {
+  console.log('🔍 getMatchesWithTeams ÇAĞRILDI');
+     
   const result = await db.query.matches.findMany({
     with: {
         homeTeam: true,
@@ -21,7 +23,10 @@ export async function getMatchesWithTeams() {
     },
     orderBy: [desc(matches.match_date)]
   });
-
+  
+  console.log('📊 Bulunan maç sayısı:', result.length);
+  console.log('📋 İlk 3 maç:', JSON.stringify(result.slice(0, 3), null, 2));
+  
   return result;
 }
 

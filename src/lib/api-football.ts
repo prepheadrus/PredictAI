@@ -100,10 +100,12 @@ export async function mapAndUpsertFixtures(fixturesResponse: any) {
 }
 
 async function processMatch(match: any, competition: any) {
+    console.log('🎯 processMatch başladı - Match ID:', match.id);
     if (!match.homeTeam?.id || !match.awayTeam?.id || !match.homeTeam?.name || !match.awayTeam?.name) {
-        console.warn(`[DB] Skipping match ${match.id} due to missing team data.`);
+        console.warn(`⚠️ Skipping match ${match.id} due to missing team data.`);
         return;
     }
+    console.log('📝 Takımlar:', match.homeTeam.name, 'vs', match.awayTeam.name);
 
     await db.insert(schema.leagues)
       .values({
@@ -146,6 +148,7 @@ async function processMatch(match: any, competition: any) {
                 match_date: matchData.match_date,
             }
         });
+    console.log('✅ Match kaydedildi:', match.id);
 }
 
 

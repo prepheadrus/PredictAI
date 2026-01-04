@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
-import { matches } from '@/db/schema';
+import { matches, teams, leagues } from '@/db/schema';
 import { count, desc } from 'drizzle-orm';
 
 export async function GET() {
@@ -9,10 +9,18 @@ export async function GET() {
     const totalMatchesResult = await db.select({ value: count() }).from(matches);
     const totalMatches = totalMatchesResult[0].value;
 
-    // 2. Get the last 3 matches
+    // 2. Count total teams
+    const totalTeamsResult = await db.select({ value: count() }).from(teams);
+    const totalTeams = totalTeamsResult[0].value;
+
+    // 3. Count total leagues
+    const totalLeaguesResult = await db.select({ value: count() }).from(leagues);
+    const totalLeagues = totalLeaguesResult[0].value;
+
+    // 4. Get the last 3 matches
     const lastThreeMatches = await db.query.matches.findMany({
       orderBy: [desc(matches.id)],
-      limit: 3,
+      limit: 5,
       with: {
         homeTeam: true,
         awayTeam: true,
@@ -22,7 +30,9 @@ export async function GET() {
     return NextResponse.json({
       message: 'Database Check Successful',
       totalMatches,
-      lastThreeMatches,
+      totalTeams,
+      totalLeagues,
+      lastFiveMatches: lastThreeMatches,
     });
 
   } catch (error: any) {
